@@ -24,7 +24,6 @@ from pycheckers.bitboard import (
 )
 from pycheckers.quiet import (
     FORCED_CAPTURE,
-    FORCED_CAPTURE_PROMOTION,
     PROMOTION,
     QUIET,
     QuietPositionGraph,
@@ -35,9 +34,9 @@ from pycheckers.quiet import (
     mask64_to32,
     pack_state32,
     run_quiet_graph,
+    split_state_key,
     square32_to64,
     square64_to32,
-    split_state_key,
 )
 
 
@@ -64,11 +63,7 @@ class CheckersBitboardTests(unittest.TestCase):
         self.assertEqual(sum(m["is_capture"] for m in moves), 72)
         self.assertEqual(len(keys), 170)
 
-        example = [
-            m
-            for m in moves
-            if m["from_mask"] == 2 and m["to_mask"] == 256
-        ]
+        example = [m for m in moves if m["from_mask"] == 2 and m["to_mask"] == 256]
         self.assertEqual(len(example), 1)
         self.assertEqual(example[0]["dr"], 1)
         self.assertEqual(example[0]["dc"], -1)
@@ -482,15 +477,12 @@ class CheckersBitboardTests(unittest.TestCase):
             zip(
                 transitions_df["predecessor_index"],
                 transitions_df["next_index"],
+                strict=True,
             )
         )
         self.assertEqual(len(transition_pairs), len(transitions_df))
 
-        shared_next_index = int(
-            transitions_df["next_index"].value_counts().loc[
-                lambda counts: counts > 1
-            ].index[0]
-        )
+        shared_next_index = int(transitions_df["next_index"].value_counts().loc[lambda counts: counts > 1].index[0])
         predecessors_df = graph.predecessors_df(shared_next_index)
         self.assertGreater(len(predecessors_df), 1)
         self.assertTrue((predecessors_df["next_index"] == shared_next_index).all())

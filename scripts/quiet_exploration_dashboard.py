@@ -8,8 +8,8 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from run_quiet_exploration import METRIC_FIELDS
-from pycheckers.quiet import QuietPositionGraph
 
+from pycheckers.quiet import QuietPositionGraph
 
 HTML = """<!doctype html>
 <html lang="en">
@@ -220,9 +220,7 @@ class SharedState:
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(
-        description="Serve a live browser dashboard for quiet checkers exploration."
-    )
+    parser = argparse.ArgumentParser(description="Serve a live browser dashboard for quiet checkers exploration.")
     parser.add_argument("--port", type=int, default=8765)
     parser.add_argument("--max-rounds", type=int, default=None)
     parser.add_argument("--max-seconds", type=float, default=120)
@@ -236,9 +234,10 @@ def explore(shared, args):
     graph = QuietPositionGraph()
     started = time.perf_counter()
 
-    with open(shared.csv_path, "w", newline="", encoding="utf-8") as csv_file, open(
-        shared.jsonl_path, "w", encoding="utf-8"
-    ) as jsonl_file:
+    with (
+        open(shared.csv_path, "w", newline="", encoding="utf-8") as csv_file,
+        open(shared.jsonl_path, "w", encoding="utf-8") as jsonl_file,
+    ):
         writer = csv.DictWriter(csv_file, fieldnames=METRIC_FIELDS)
         writer.writeheader()
 

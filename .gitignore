@@ -3,6 +3,9 @@ __pycache__/
 .ipynb_checkpoints/
 quiet_exploration_runs/
 .pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
 .mypy_cache/
 .ruff_cache/
 build/

@@ -8,6 +8,7 @@ The package is currently focused on a simple, inspectable core:
 
 - immutable `BoardState` objects;
 - black, white, and king bitboards plus side to move;
+- 170 side-independent primitive diagonal move templates;
 - legal move and legal turn generation;
 - mandatory capture;
 - multi-jump capture turns;
@@ -16,18 +17,16 @@ The package is currently focused on a simple, inspectable core:
 - the rule that a man stops when crowned during a jump;
 - notebook-friendly move tables and board visualizations.
 
-The older quiet-position/tablebase code is still present under
-`pycheckers.quiet` and development notebooks, but it is experimental and not the
-main public API. That layer is expected to be redesigned around simpler data
-structures.
-
 ## Local Development
 
 From this repository root:
 
 ```powershell
 python -m pip install -e ".[dev]"
-python -m unittest discover -s tests -v
+python -m compileall -q src tests scripts
+ruff check src tests scripts
+ruff format --check src tests scripts
+pytest --cov=pycheckers --cov-report=term-missing
 ```
 
 ## Repository Layout
@@ -36,7 +35,7 @@ The package code is under `src/pycheckers`. Tests live under `tests`.
 Notebook material lives under `notebooks`; the main notebook is
 `notebooks/primitive_move_catalog.ipynb`.
 
-Development-only tablebase notebooks and helpers live under `notebooks/dev`.
+Development-only exploration notebooks and helpers live under `notebooks/dev`.
 
 Without installing, tests and notebooks can use the source tree directly by
 putting `src` on `PYTHONPATH`.
@@ -46,13 +45,25 @@ $env:PYTHONPATH = "$PWD\src"
 python -m unittest discover -s tests -v
 ```
 
+The CI path uses `pytest` with coverage reporting and `ruff` for lint and
+format checks. Coverage is gated at 82%, just below the current 82.68% baseline,
+so the floor can be ratcheted toward full line coverage.
+
 ## Minimal Example
 
 ```python
-from pycheckers import BoardState, moves_df, primitive_move_catalog_df, show_state, show_turn
+from pycheckers import (
+    BoardState,
+    moves_df,
+    primitive_rule_runtime_catalog_df,
+    show_primitive_rule_rows,
+    show_state,
+    show_turn,
+)
 
-all_primitive_moves = primitive_move_catalog_df()
-print(len(all_primitive_moves))
+runtime_rules = primitive_rule_runtime_catalog_df()
+print(len(runtime_rules))
+show_primitive_rule_rows(runtime_rules.iloc[:3])
 
 state = BoardState.initial()
 show_state(state)

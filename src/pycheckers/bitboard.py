@@ -204,10 +204,10 @@ def apply_move(black, white, kings, side, move, switch_side=True):
     promotes = _move_promotes(kings, side, move)
 
     new_kings = (
-        (kings & ~from_mask)
-        | (to_mask if mover_was_king else 0)
-        | (to_mask if promotes else 0)
-    ) & (new_black | new_white) & MASK64
+        ((kings & ~from_mask) | (to_mask if mover_was_king else 0) | (to_mask if promotes else 0))
+        & (new_black | new_white)
+        & MASK64
+    )
 
     new_side = _other_side(side) if switch_side else side
     validate_position(new_black, new_white, new_kings)
@@ -239,11 +239,7 @@ def is_quiet_man_state(state, pieces_per_side=12):
         _validate_side(side)
     except ValueError:
         return False
-    return (
-        kings == 0
-        and black.bit_count() == pieces_per_side
-        and white.bit_count() == pieces_per_side
-    )
+    return kings == 0 and black.bit_count() == pieces_per_side and white.bit_count() == pieces_per_side
 
 
 def quiet_man_exit_reason(state, move):
@@ -532,7 +528,7 @@ def show_board(black, white, kings, dots=0, other=None, size=3):
             raise ValueError("other must be (black, white, kings) or include dots")
         boards.append((ob, ow, ok, od))
 
-    for ax, (bmask, wmask, kmask, dmask) in zip(axes, boards):
+    for ax, (bmask, wmask, kmask, dmask) in zip(axes, boards, strict=True):
         draw_board(ax, bmask, wmask, kmask, dots=dmask)
 
     plt.show()
