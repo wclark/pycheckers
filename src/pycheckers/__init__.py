@@ -21,7 +21,8 @@ from .bitboard import (
     square_mask,
     validate_position,
 )
-from .display import show_move_rows, show_primitive_rule_rows, show_state, show_turn, show_turn_rows
+from .display import show_move_rows, show_primitive_rule_rows, show_ruleset_rows, show_state, show_turn, show_turn_rows
+from .encoding import MASK32, mask32_to64, mask64_to32, square32_to64, square64_to32, square_mask32_from64
 from .rules import (
     applicable_primitive_rules,
     apply_primitive_rule,
@@ -45,6 +46,7 @@ from .rules import (
     state_record,
     turns_df,
 )
+from .ruleset import Ruleset, TurnState, american_ruleset, as_turn_state
 from .state import BoardState, as_state
 
 __version__ = "0.1.0"
@@ -54,12 +56,17 @@ __all__ = [
     "BLACK_PROMO_MASK",
     "BoardState",
     "DARKS_MASK",
+    "MASK32",
+    "Ruleset",
+    "TurnState",
     "WHITE_PROMO_MASK",
+    "american_ruleset",
     "apply_move",
     "apply_primitive_rule",
     "apply_turn",
     "applicable_primitive_rules",
     "as_state",
+    "as_turn_state",
     "bitboards_from_ascii",
     "bits_from_grid",
     "capture_chains",
@@ -71,6 +78,8 @@ __all__ = [
     "legal_moves",
     "legal_successors",
     "legal_turns",
+    "mask32_to64",
+    "mask64_to32",
     "move_record",
     "moves_df",
     "primitive_move_catalog_df",
@@ -90,10 +99,14 @@ __all__ = [
     "show_board",
     "show_move_rows",
     "show_primitive_rule_rows",
+    "show_ruleset_rows",
     "show_state",
     "show_turn",
     "show_turn_rows",
+    "square32_to64",
+    "square64_to32",
     "square_from_mask",
+    "square_mask32_from64",
     "square_mask",
     "state_record",
     "turns_df",

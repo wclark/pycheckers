@@ -1,11 +1,9 @@
 """Notebook-friendly board visualization helpers."""
 
 from .bitboard import MASK64, draw_board, is_dark, square_mask
-from .rules import (
-    move_record,
-    primitive_rule_records,
-    primitive_rule_runtime_records,
-)
+from .encoding import MASK32, mask32_to64
+from .rules import move_record, primitive_rule_records, primitive_rule_runtime_records
+from .ruleset import Ruleset, american_ruleset
 from .state import as_state
 
 
@@ -75,7 +73,23 @@ def show_primitive_rule_rows(
     title=None,
     show=True,
 ):
-    rows = _runtime_rule_records(rules, side)
+    ruleset = american_ruleset()
+    rows = _runtime_rule_records(rules, side, ruleset=ruleset)
+    return _show_runtime_rule_rows(rows, size=size, title=title, show=show)
+
+
+def show_ruleset_rows(
+    ruleset,
+    rules=None,
+    size=3.2,
+    title=None,
+    show=True,
+):
+    rows = _runtime_rule_records(rules, "both", ruleset=ruleset)
+    return _show_runtime_rule_rows(rows, size=size, title=title, show=show)
+
+
+def _show_runtime_rule_rows(rows, size=3.2, title=None, show=True):
     if not rows:
         raise ValueError("at least one rule row is required")
 
@@ -294,7 +308,7 @@ def _draw_base_rule_board(ax):
 
 
 def _draw_mask_markers(ax, mask, kind):
-    mask = int(mask) & MASK64
+    mask = _display_mask(mask)
     for row in range(8):
         for col in range(8):
             if mask & square_mask(row, col):
@@ -421,7 +435,17 @@ def _rule_records(rules):
     return list(rules)
 
 
-def _runtime_rule_records(rules, side):
+def _runtime_rule_records(rules, side, ruleset=None):
+    if isinstance(rules, Ruleset):
+        ruleset = rules
+        rules = None
+    if rules is None and ruleset is not None:
+        rows = ruleset.records()
+        if side not in (None, "both", "all"):
+            black_to_move = 1 if side == "B" else 0
+            rows = [row for row in rows if int(row["black_to_move"]) == black_to_move]
+        return rows
+
     rows = _rule_records(rules)
     if rules is None:
         rows = primitive_rule_records()
@@ -453,3 +477,10 @@ def _has_runtime_masks(rule):
         "promotion",
         "capture",
     } <= set(rule)
+
+
+def _display_mask(mask):
+    mask = int(mask)
+    if mask & ~MASK32:
+        return mask & MASK64
+    return mask32_to64(mask)
