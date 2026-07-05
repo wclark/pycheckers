@@ -20,9 +20,9 @@ From this repository root:
 
 ```powershell
 python -m pip install -e ".[dev]"
-python -m compileall -q src tests scripts
-ruff check src tests scripts
-ruff format --check src tests scripts
+python -m compileall -q src tests
+ruff check src tests
+ruff format --check src tests
 pytest --cov=pycheckers --cov-report=term-missing
 mkdocs build --strict
 ```
