@@ -1,13 +1,15 @@
 # pycheckers
 
-`pycheckers` is a small Python package for American checkers board states,
-primitive rule tables, legal move generation, and notebook-friendly inspection.
+`pycheckers` is a compact native-32-bit model for American checkers boards,
+turns, primitive rules, and rulesets.
 
 The core public objects are:
 
-- `BoardState`, the 8x8 board representation used by the package API.
-- `TurnState`, a compact 32-bit playable-square representation for fast rule matching.
-- `Ruleset`, the compact primitive-rule table used to generate legal primitive moves.
+- `Board`, a tuple-like set of black, white, and king masks.
+- `Turn`, a `Board` plus side-to-move and optional metadata.
+- `Conditions` and `Effects`, the two halves of a primitive rule.
+- `Rule`, one condition/effect transformation.
+- `Ruleset`, the generated American checkers primitive-rule table.
 
 The package is still pre-alpha. The current development target is a clean,
 well-tested rules layer that can later support larger tablebase work.

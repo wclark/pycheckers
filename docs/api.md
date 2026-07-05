@@ -1,13 +1,17 @@
 # API Reference
 
+::: pycheckers.ruleset.Board
+
+::: pycheckers.ruleset.Turn
+
+::: pycheckers.ruleset.Conditions
+
+::: pycheckers.ruleset.Effects
+
+::: pycheckers.ruleset.Rule
+
 ::: pycheckers.ruleset.Ruleset
 
-::: pycheckers.ruleset.TurnState
-
-::: pycheckers.state.BoardState
-
 ::: pycheckers.encoding
-
-::: pycheckers.rules
 
 ::: pycheckers.display

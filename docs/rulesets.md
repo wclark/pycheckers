@@ -1,42 +1,43 @@
 # Rulesets
 
 The default ruleset is `Ruleset.american()`. It stores one row per primitive
-runtime rule. Each row contains six 32-bit playable-square masks:
+runtime rule. Each row has conditions, effects, and metadata:
 
-- `is_black`
-- `is_white`
-- `is_empty`
-- `be_black`
-- `be_white`
-- `be_empty`
+- conditions: `is_black`, `is_white`, `is_empty`, `black_to_move`, `king`;
+- effects: `be_black`, `be_white`, `be_empty`, `promotion`, `capture`.
 
-It also stores four one-bit rule flags:
-
-- `black_to_move`
-- `king`
-- `promotion`
-- `capture`
-
-The dataframe and plotting views are methods on the ruleset:
+The ruleset exposes native Python views for analysis:
 
 ```python
 from pycheckers import Ruleset
 
 ruleset = Ruleset.american()
+
+records = ruleset.records
+record_map = ruleset.record_map
+rule_keys = ruleset.rule_set
+by_side = ruleset.rules_by_side
+by_metadata = ruleset.rules_by_metadata
+```
+
+It also provides dataframe and plotting views:
+
+```python
 df = ruleset.to_dataframe()
 figures = ruleset.plot(df.iloc[:3])
 ```
 
-Legal primitive rules can be found against either `BoardState` or `TurnState`:
+Legal primitive rules are matched against `Turn` objects:
 
 ```python
-from pycheckers import BoardState, Ruleset, TurnState
+from pycheckers import Ruleset, Turn
 
 ruleset = Ruleset.american()
-board = BoardState.initial()
-turn = TurnState.from_board_state(board)
+turn = Turn.initial()
 
 rule_indexes = ruleset.legal_rule_indices(turn)
-moves = ruleset.legal_moves(board)
-next_states = ruleset.successors(turn)
+rules = ruleset.legal_rules(turn)
+moves = ruleset.legal_moves(turn)
+next_turns = ruleset.successors(turn)
+next_by_rule = ruleset.successor_map(turn)
 ```

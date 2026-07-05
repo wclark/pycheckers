@@ -1,19 +1,11 @@
-"""Compact ruleset storage and matching for American checkers."""
+"""Native 32-bit boards, turns, rules, and rulesets."""
 
 from __future__ import annotations
 
-from array import array
+from collections.abc import Mapping
 from dataclasses import dataclass
 
-from .bitboard import (
-    BLACK_PROMO_MASK,
-    WHITE_PROMO_MASK,
-    generate_move_templates,
-    square_from_mask,
-    validate_position,
-)
-from .encoding import MASK32, mask32_to64, mask64_to32, square_mask32_from64
-from .state import BoardState
+from .encoding import MASK32, is_playable_square, square_from_mask32, square_mask32
 
 FLAG_BLACK_TO_MOVE = 1 << 0
 FLAG_KING = 1 << 1
@@ -33,125 +25,399 @@ RULE_COLUMNS = (
     "capture",
 )
 
+INITIAL_BLACK = 0x00000FFF
+INITIAL_WHITE = 0xFFF00000
+
 
 @dataclass(frozen=True, slots=True)
-class TurnState:
-    """A side-to-move checkers position using 32-bit playable-square masks."""
+class Board:
+    """A checkers board stored as black, white, and king 32-bit masks."""
 
     black: int
     white: int
     kings: int = 0
-    black_to_move: int = 1
 
     def __post_init__(self):
-        black = int(self.black) & MASK32
-        white = int(self.white) & MASK32
-        kings = int(self.kings) & MASK32
-        black_to_move = _black_to_move_bit(self.black_to_move)
-
+        black = _mask32(self.black, "black")
+        white = _mask32(self.white, "white")
+        kings = _mask32(self.kings, "kings")
         if black & white:
-            raise ValueError("black and white bitboards overlap")
+            raise ValueError("black and white masks overlap")
         if kings & ~(black | white):
             raise ValueError("kings must be a subset of occupied squares")
-
         object.__setattr__(self, "black", black)
         object.__setattr__(self, "white", white)
         object.__setattr__(self, "kings", kings)
-        object.__setattr__(self, "black_to_move", black_to_move)
 
     @classmethod
-    def from_board_state(cls, state):
-        """Convert a :class:`pycheckers.BoardState` into a 32-bit turn state."""
+    def initial(cls):
+        """Return the standard starting board."""
 
-        if not isinstance(state, BoardState):
-            state = BoardState.from_tuple(state)
-        return cls(
-            mask64_to32(state.black),
-            mask64_to32(state.white),
-            mask64_to32(state.kings),
-            state.side == "B",
-        )
+        return cls(INITIAL_BLACK, INITIAL_WHITE, 0)
 
     @classmethod
-    def from_tuple(cls, state):
-        """Create a turn state from ``(black32, white32, kings32, black_to_move)``."""
+    def from_tuple(cls, values):
+        """Create a board from ``(black, white, kings)``."""
 
-        return cls(*state)
-
-    @property
-    def side(self):
-        """Return ``"B"`` or ``"W"`` for the side to move."""
-
-        return "B" if self.black_to_move else "W"
+        if len(values) != 3:
+            raise ValueError("board tuple must have three fields")
+        return cls(*values)
 
     @property
     def occupied(self):
-        """Return the 32-bit mask of occupied playable squares."""
+        """Return the occupied-square mask."""
 
         return self.black | self.white
 
     @property
     def empty(self):
-        """Return the 32-bit mask of empty playable squares."""
+        """Return the empty playable-square mask."""
 
         return (~self.occupied) & MASK32
 
+    @property
+    def key(self):
+        """Return a hashable native tuple key."""
+
+        return self.as_tuple()
+
+    @property
+    def maps(self):
+        """Return a plain dict of the board masks."""
+
+        return self.as_dict()
+
     def as_tuple(self):
-        """Return ``(black32, white32, kings32, black_to_move)``."""
+        """Return ``(black, white, kings)``."""
 
-        return self.black, self.white, self.kings, self.black_to_move
+        return self.black, self.white, self.kings
 
-    def as_board_state(self):
-        """Expand this state into the public 8x8 :class:`pycheckers.BoardState`."""
+    def as_dict(self):
+        """Return a plain dict of 32-bit masks."""
 
-        return BoardState(
-            mask32_to64(self.black),
-            mask32_to64(self.white),
-            mask32_to64(self.kings),
-            self.side,
+        return {"black": self.black, "white": self.white, "kings": self.kings}
+
+
+@dataclass(frozen=True, slots=True)
+class Turn:
+    """A board plus side to move and optional hashable metadata."""
+
+    board: Board
+    black_to_move: int = 1
+    metadata: tuple = ()
+
+    def __post_init__(self):
+        board = self.board if isinstance(self.board, Board) else Board.from_tuple(self.board)
+        black_to_move = _turn_bit(self.black_to_move)
+        metadata = _metadata_tuple(self.metadata)
+        object.__setattr__(self, "board", board)
+        object.__setattr__(self, "black_to_move", black_to_move)
+        object.__setattr__(self, "metadata", metadata)
+
+    @classmethod
+    def initial(cls):
+        """Return the standard starting turn."""
+
+        return cls(Board.initial(), 1)
+
+    @classmethod
+    def from_masks(cls, black, white, kings=0, black_to_move=1, metadata=()):
+        """Create a turn from board masks and side to move."""
+
+        return cls(Board(black, white, kings), black_to_move, metadata)
+
+    @classmethod
+    def from_tuple(cls, values):
+        """Create a turn from ``(black, white, kings, black_to_move[, metadata])``."""
+
+        if len(values) == 4:
+            return cls.from_masks(*values)
+        if len(values) == 5:
+            return cls.from_masks(*values)
+        raise ValueError("turn tuple must have four or five fields")
+
+    @property
+    def black(self):
+        return self.board.black
+
+    @property
+    def white(self):
+        return self.board.white
+
+    @property
+    def kings(self):
+        return self.board.kings
+
+    @property
+    def occupied(self):
+        return self.board.occupied
+
+    @property
+    def empty(self):
+        return self.board.empty
+
+    @property
+    def side(self):
+        """Return ``"black"`` or ``"white"`` for the side to move."""
+
+        return "black" if self.black_to_move else "white"
+
+    @property
+    def key(self):
+        """Return a hashable native tuple key."""
+
+        return self.as_tuple()
+
+    @property
+    def maps(self):
+        """Return a plain dict of board and turn masks."""
+
+        return self.as_dict()
+
+    def as_tuple(self):
+        """Return ``(black, white, kings, black_to_move)`` plus metadata if present."""
+
+        base = (*self.board.as_tuple(), self.black_to_move)
+        if self.metadata:
+            return (*base, self.metadata)
+        return base
+
+    def as_dict(self):
+        """Return a plain dict for dataframe or ad hoc analysis use."""
+
+        record = {**self.board.as_dict(), "black_to_move": self.black_to_move}
+        if self.metadata:
+            record["metadata"] = dict(self.metadata)
+        return record
+
+
+@dataclass(frozen=True, slots=True)
+class Conditions:
+    """Bit conditions a rule checks against a turn."""
+
+    is_black: int
+    is_white: int
+    is_empty: int
+    black_to_move: int
+    king: int = 0
+
+    def __post_init__(self):
+        object.__setattr__(self, "is_black", _mask32(self.is_black, "is_black"))
+        object.__setattr__(self, "is_white", _mask32(self.is_white, "is_white"))
+        object.__setattr__(self, "is_empty", _mask32(self.is_empty, "is_empty"))
+        object.__setattr__(self, "black_to_move", _turn_bit(self.black_to_move))
+        object.__setattr__(self, "king", int(bool(self.king)))
+
+    @property
+    def mover(self):
+        """Return the required mover-square mask."""
+
+        return self.is_black if self.black_to_move else self.is_white
+
+    @property
+    def as_tuple(self):
+        """Return a hashable condition tuple."""
+
+        return self.is_black, self.is_white, self.is_empty, self.black_to_move, self.king
+
+    @property
+    def as_dict(self):
+        """Return a plain dict of condition fields."""
+
+        return {
+            "is_black": self.is_black,
+            "is_white": self.is_white,
+            "is_empty": self.is_empty,
+            "black_to_move": self.black_to_move,
+            "king": self.king,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class Effects:
+    """Bit effects a rule applies to a turn."""
+
+    be_black: int
+    be_white: int
+    be_empty: int
+    promotion: int = 0
+    capture: int = 0
+
+    def __post_init__(self):
+        object.__setattr__(self, "be_black", _mask32(self.be_black, "be_black"))
+        object.__setattr__(self, "be_white", _mask32(self.be_white, "be_white"))
+        object.__setattr__(self, "be_empty", _mask32(self.be_empty, "be_empty"))
+        object.__setattr__(self, "promotion", int(bool(self.promotion)))
+        object.__setattr__(self, "capture", int(bool(self.capture)))
+
+    @property
+    def as_tuple(self):
+        """Return a hashable effect tuple."""
+
+        return self.be_black, self.be_white, self.be_empty, self.promotion, self.capture
+
+    @property
+    def as_dict(self):
+        """Return a plain dict of effect fields."""
+
+        return {
+            "be_black": self.be_black,
+            "be_white": self.be_white,
+            "be_empty": self.be_empty,
+            "promotion": self.promotion,
+            "capture": self.capture,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class Rule:
+    """A primitive rule made of conditions and effects."""
+
+    conditions: Conditions
+    effects: Effects
+
+    def __post_init__(self):
+        conditions = self.conditions if isinstance(self.conditions, Conditions) else Conditions(**self.conditions)
+        effects = self.effects if isinstance(self.effects, Effects) else Effects(**self.effects)
+        object.__setattr__(self, "conditions", conditions)
+        object.__setattr__(self, "effects", effects)
+
+    @classmethod
+    def from_record(cls, record):
+        """Create a rule from a flat rule record."""
+
+        return cls(
+            Conditions(
+                record["is_black"],
+                record["is_white"],
+                record["is_empty"],
+                record["black_to_move"],
+                record["king"],
+            ),
+            Effects(
+                record["be_black"],
+                record["be_white"],
+                record["be_empty"],
+                record["promotion"],
+                record["capture"],
+            ),
         )
+
+    @property
+    def as_tuple(self):
+        """Return a hashable tuple representation."""
+
+        return (*self.conditions.as_tuple, *self.effects.as_tuple)
+
+    @property
+    def as_dict(self):
+        """Return a plain flat rule record without an index."""
+
+        return {**self.conditions.as_dict, **self.effects.as_dict}
+
+    @property
+    def flags(self):
+        """Return packed rule metadata flags."""
+
+        flags = 0
+        if self.conditions.black_to_move:
+            flags |= FLAG_BLACK_TO_MOVE
+        if self.conditions.king:
+            flags |= FLAG_KING
+        if self.effects.promotion:
+            flags |= FLAG_PROMOTION
+        if self.effects.capture:
+            flags |= FLAG_CAPTURE
+        return flags
+
+    @property
+    def mover_effect(self):
+        """Return the square where the moving piece is placed."""
+
+        return self.effects.be_black if self.conditions.black_to_move else self.effects.be_white
+
+    @property
+    def captured_mask(self):
+        """Return the captured piece mask, or zero for quiet moves."""
+
+        if not self.effects.capture:
+            return 0
+        return self.effects.be_empty & ~self.conditions.mover
+
+    def applies(self, turn):
+        """Return whether this rule's conditions match a turn."""
+
+        turn = as_turn(turn)
+        conditions = self.conditions
+        if conditions.black_to_move != turn.black_to_move:
+            return False
+        if (turn.black & conditions.is_black) != conditions.is_black:
+            return False
+        if (turn.white & conditions.is_white) != conditions.is_white:
+            return False
+        if (turn.empty & conditions.is_empty) != conditions.is_empty:
+            return False
+        mover_is_king = (turn.kings & conditions.mover) == conditions.mover
+        return mover_is_king if conditions.king else not mover_is_king
+
+    def apply(self, turn, switch_side=True):
+        """Apply this rule to a matching turn."""
+
+        turn = as_turn(turn)
+        if not self.applies(turn):
+            raise ValueError("rule conditions are not satisfied by the turn")
+
+        effects = self.effects
+        next_black = ((turn.black & ~effects.be_empty) | effects.be_black) & MASK32
+        next_white = ((turn.white & ~effects.be_empty) | effects.be_white) & MASK32
+        next_kings = (turn.kings & ~effects.be_empty) & MASK32
+        if self.conditions.king or effects.promotion:
+            next_kings |= self.mover_effect
+
+        next_side = 1 - turn.black_to_move if switch_side else turn.black_to_move
+        return Turn(Board(next_black, next_white, next_kings), next_side, turn.metadata)
+
+    def move_record(self):
+        """Return a compact move dictionary using 32-bit masks."""
+
+        from_row, from_col = square_from_mask32(self.conditions.mover)
+        to_row, to_col = square_from_mask32(self.mover_effect)
+        return {
+            "from_mask": self.conditions.mover,
+            "to_mask": self.mover_effect,
+            "captured_mask": self.captured_mask,
+            "dr": to_row - from_row,
+            "dc": to_col - from_col,
+            "capture": bool(self.effects.capture),
+            "promotion": bool(self.effects.promotion),
+            "king": bool(self.conditions.king),
+        }
 
 
 class Ruleset:
-    """A compact, indexed table of primitive checkers rules.
-
-    Masks are stored as unsigned 32-bit playable-square bitmaps. Metadata is
-    stored as one byte per rule using the black-to-move, king, promotion, and
-    capture flag bits.
-    """
+    """A collection of primitive rules with native Python indexes and records."""
 
     __slots__ = (
-        "is_black",
-        "is_white",
-        "is_empty",
-        "be_black",
-        "be_white",
-        "be_empty",
-        "flags",
-        "_indices_by_side",
-        "_indices_by_metadata",
+        "rules",
+        "records",
+        "record_map",
+        "rule_set",
+        "condition_tuples",
+        "effect_tuples",
+        "rules_by_side",
+        "rules_by_metadata",
     )
 
-    def __init__(
-        self,
-        is_black,
-        is_white,
-        is_empty,
-        be_black,
-        be_white,
-        be_empty,
-        flags,
-    ):
-        self.is_black = _uint32_array(is_black)
-        self.is_white = _uint32_array(is_white)
-        self.is_empty = _uint32_array(is_empty)
-        self.be_black = _uint32_array(be_black)
-        self.be_white = _uint32_array(be_white)
-        self.be_empty = _uint32_array(be_empty)
-        self.flags = _uint8_array(flags)
-        self._validate_lengths()
-        self._indices_by_side = self._build_side_index()
-        self._indices_by_metadata = self._build_metadata_index()
+    def __init__(self, rules):
+        rule_tuple = tuple(_coerce_rule(rule) for rule in rules)
+        self.rules = rule_tuple
+        self.records = tuple(_indexed_record(index, rule) for index, rule in enumerate(rule_tuple))
+        self.record_map = {index: record for index, record in enumerate(self.records)}
+        self.rule_set = {rule.as_tuple for rule in rule_tuple}
+        self.condition_tuples = tuple(rule.conditions.as_tuple for rule in rule_tuple)
+        self.effect_tuples = tuple(rule.effects.as_tuple for rule in rule_tuple)
+        self.rules_by_side = _rules_by_side(rule_tuple)
+        self.rules_by_metadata = _rules_by_metadata(rule_tuple)
 
     @classmethod
     def american(cls, side="both"):
@@ -159,96 +425,75 @@ class Ruleset:
 
         if side is None or str(side).lower() in ("both", "all"):
             return american_ruleset()
-        return cls.from_geometric_templates(side=side)
+        return cls.from_board_geometry(side=side)
 
     @classmethod
-    def from_geometric_templates(cls, side="both", templates=None):
-        """Build compact runtime rules from geometric move templates."""
+    def from_board_geometry(cls, side="both"):
+        """Build rules directly from the 32 playable-square board geometry."""
 
-        templates = generate_move_templates() if templates is None else list(templates)
-        rows = []
-        for runtime_side in _runtime_sides(side):
-            for template in templates:
-                if not _template_requires_king(runtime_side, template):
-                    rows.append(_runtime_row_from_template(template, runtime_side, king=False))
-                rows.append(_runtime_row_from_template(template, runtime_side, king=True))
-        return cls.from_records(rows)
+        rules = []
+        for black_to_move in _runtime_sides(side):
+            for template in _compact_move_templates():
+                if not _template_requires_king(black_to_move, template):
+                    rules.append(_rule_from_template(template, black_to_move, king=0))
+                rules.append(_rule_from_template(template, black_to_move, king=1))
+        return cls(rules)
 
     @classmethod
     def from_records(cls, records):
-        """Build a ruleset from records containing :data:`RULE_COLUMNS`."""
+        """Build a ruleset from flat records, rule objects, or a dataframe."""
 
-        rows = list(_records_from_any(records))
-        return cls(
-            (row["is_black"] for row in rows),
-            (row["is_white"] for row in rows),
-            (row["is_empty"] for row in rows),
-            (row["be_black"] for row in rows),
-            (row["be_white"] for row in rows),
-            (row["be_empty"] for row in rows),
-            (_flags_from_row(row) for row in rows),
-        )
+        return cls(_records_from_any(records))
 
     def __len__(self):
-        return len(self.flags)
+        return len(self.rules)
 
     def __iter__(self):
-        return iter(range(len(self)))
+        return iter(self.rules)
+
+    def __getitem__(self, rule_index):
+        return self.rules[self._check_index(rule_index)]
 
     def record(self, rule_index):
         """Return one rule as a plain dictionary."""
 
-        index = self._check_index(rule_index)
-        flags = self.flags[index]
-        return {
-            "rule_index": index,
-            "is_black": int(self.is_black[index]),
-            "is_white": int(self.is_white[index]),
-            "is_empty": int(self.is_empty[index]),
-            "be_black": int(self.be_black[index]),
-            "be_white": int(self.be_white[index]),
-            "be_empty": int(self.be_empty[index]),
-            "black_to_move": 1 if flags & FLAG_BLACK_TO_MOVE else 0,
-            "king": 1 if flags & FLAG_KING else 0,
-            "promotion": 1 if flags & FLAG_PROMOTION else 0,
-            "capture": 1 if flags & FLAG_CAPTURE else 0,
-        }
-
-    def records(self):
-        """Return all rules as dictionaries."""
-
-        return [self.record(index) for index in range(len(self))]
+        return dict(self.record_map[self._check_index(rule_index)])
 
     def to_dataframe(self):
         """Return the compact ruleset table as a pandas dataframe."""
 
         import pandas as pd
 
-        df = pd.DataFrame.from_records(self.records(), columns=("rule_index", *RULE_COLUMNS))
+        df = pd.DataFrame.from_records(self.records, columns=("rule_index", *RULE_COLUMNS))
         return df.set_index("rule_index").rename_axis(None)
 
-    def plot(self, rules=None, size=3.2, title=None, show=True):
-        """Plot rules with condition, effect, and summary boards."""
-
-        from .display import show_ruleset_rows
-
-        return show_ruleset_rows(self, rules=self.select_records(rules), size=size, title=title, show=show)
-
     def select_records(self, rules=None):
-        """Return rule records selected by indexes, slices, dataframes, or records."""
+        """Return selected rule records from indexes, slices, dataframes, or records."""
 
         if rules is None:
-            return self.records()
+            return [dict(record) for record in self.records]
         if isinstance(rules, int):
             return [self.record(rules)]
         if isinstance(rules, slice):
             return [self.record(index) for index in range(len(self))[rules]]
         if hasattr(rules, "to_dict") and hasattr(rules, "columns"):
-            return list(rules.to_dict("index").values())
+            rows = []
+            for index, record in rules.to_dict("index").items():
+                record = dict(record)
+                record.setdefault("rule_index", index)
+                rows.append(record)
+            return rows
         values = list(rules)
         if all(isinstance(value, int) for value in values):
             return [self.record(index) for index in values]
-        return values
+        return [dict(value.as_dict if isinstance(value, Rule) else value) for value in values]
+
+    def plot(self, rules=None, size=3.2, title=None, show=True):
+        """Plot selected rules with condition, effect, and summary boards."""
+
+        from .display import show_ruleset_rows
+
+        return show_ruleset_rows(self, rules=rules, size=size, title=title, show=show)
 
     def indices_for(self, black_to_move=None, king=None, promotion=None, capture=None):
         """Return rule indexes matching metadata filters."""
@@ -260,163 +505,93 @@ class Ruleset:
                 int(bool(promotion)),
                 int(bool(capture)),
             )
-            return list(self._indices_by_metadata.get(key, ()))
+            return list(self.rules_by_metadata.get(key, ()))
 
         indexes = range(len(self))
         return [
-            index
-            for index in indexes
-            if _flag_matches(self.flags[index], FLAG_BLACK_TO_MOVE, black_to_move)
-            and _flag_matches(self.flags[index], FLAG_KING, king)
-            and _flag_matches(self.flags[index], FLAG_PROMOTION, promotion)
-            and _flag_matches(self.flags[index], FLAG_CAPTURE, capture)
+            index for index in indexes if _metadata_matches(self.rules[index], black_to_move, king, promotion, capture)
         ]
 
-    def rule_applies(self, state, rule_index):
-        """Return whether a rule's bit conditions are satisfied by a state."""
+    def matching_rule_indices(self, turn, captures_only=False, from_mask=None):
+        """Return primitive rule indexes whose conditions match a turn."""
 
-        state = as_turn_state(state)
-        index = self._check_index(rule_index)
-        if bool(self.flags[index] & FLAG_BLACK_TO_MOVE) != bool(state.black_to_move):
-            return False
-        if (state.black & self.is_black[index]) != self.is_black[index]:
-            return False
-        if (state.white & self.is_white[index]) != self.is_white[index]:
-            return False
-        if (state.empty & self.is_empty[index]) != self.is_empty[index]:
-            return False
-
-        mover = self._mover_condition_mask(index)
-        mover_is_king = (state.kings & mover) == mover
-        return mover_is_king if self.flags[index] & FLAG_KING else not mover_is_king
-
-    def matching_rule_indices(self, state, captures_only=False, from_mask=None):
-        """Return all primitive rule indexes whose conditions match a state."""
-
-        state = as_turn_state(state)
-        indexes = self._indices_by_side[state.black_to_move]
+        turn = as_turn(turn)
+        indexes = self.rules_by_side[turn.black_to_move]
         if captures_only:
-            indexes = [index for index in indexes if self.flags[index] & FLAG_CAPTURE]
+            indexes = [index for index in indexes if self.rules[index].effects.capture]
         if from_mask is not None:
-            from_mask = _coerce_mask32(from_mask)
-            indexes = [index for index in indexes if self._mover_condition_mask(index) == from_mask]
-        return [index for index in indexes if self.rule_applies(state, index)]
+            from_mask = _mask32(from_mask, "from_mask")
+            indexes = [index for index in indexes if self.rules[index].conditions.mover == from_mask]
+        return [index for index in indexes if self.rules[index].applies(turn)]
 
-    def legal_rule_indices(self, state, from_mask=None):
+    def matching_rules(self, turn, captures_only=False, from_mask=None):
+        """Return matching rule objects."""
+
+        return tuple(self.rules[index] for index in self.matching_rule_indices(turn, captures_only, from_mask))
+
+    def legal_rule_indices(self, turn, from_mask=None):
         """Return legal primitive rule indexes, applying mandatory capture."""
 
-        matches = self.matching_rule_indices(state, from_mask=from_mask)
-        captures = [index for index in matches if self.flags[index] & FLAG_CAPTURE]
+        matches = self.matching_rule_indices(turn, from_mask=from_mask)
+        captures = [index for index in matches if self.rules[index].effects.capture]
         return captures if captures else matches
 
-    def legal_moves(self, state, from_mask=None):
-        """Return legal primitive moves as 8x8 masks for compatibility."""
+    def legal_rules(self, turn, from_mask=None):
+        """Return legal primitive rule objects."""
 
-        return [self.rule_move(index) for index in self.legal_rule_indices(state, from_mask=from_mask)]
+        return tuple(self.rules[index] for index in self.legal_rule_indices(turn, from_mask=from_mask))
 
-    def successors(self, state):
-        """Return successor turn states for each legal primitive rule."""
+    def legal_moves(self, turn, from_mask=None):
+        """Return legal primitive moves as plain dictionaries of 32-bit masks."""
 
-        return [self.apply_rule(state, index) for index in self.legal_rule_indices(state)]
+        return tuple(rule.move_record() for rule in self.legal_rules(turn, from_mask=from_mask))
 
-    def apply_rule(self, state, rule_index, switch_side=True):
-        """Apply one satisfied primitive rule to a 32-bit turn state."""
+    def apply_rule(self, turn, rule_index, switch_side=True):
+        """Apply one satisfied primitive rule to a turn."""
 
-        state = as_turn_state(state)
-        index = self._check_index(rule_index)
-        if not self.rule_applies(state, index):
-            raise ValueError("rule conditions are not satisfied by the state")
+        return self.rules[self._check_index(rule_index)].apply(turn, switch_side=switch_side)
 
-        next_black = ((state.black & ~self.be_empty[index]) | self.be_black[index]) & MASK32
-        next_white = ((state.white & ~self.be_empty[index]) | self.be_white[index]) & MASK32
-        next_kings = state.kings & ~self.be_empty[index] & MASK32
-        if self.flags[index] & (FLAG_KING | FLAG_PROMOTION):
-            next_kings |= self._mover_effect_mask(index)
+    def successors(self, turn):
+        """Return successor turns for each legal primitive rule."""
 
-        next_side = 1 - state.black_to_move if switch_side else state.black_to_move
-        return TurnState(next_black, next_white, next_kings, next_side)
+        return tuple(self.apply_rule(turn, index) for index in self.legal_rule_indices(turn))
 
-    def apply_rule_to_board(self, state, rule_index, switch_side=True):
-        """Apply a primitive rule and return an 8x8 :class:`pycheckers.BoardState`."""
+    def successor_map(self, turn):
+        """Return ``{rule_index: successor_turn}`` for legal rules."""
 
-        return self.apply_rule(state, rule_index, switch_side=switch_side).as_board_state()
-
-    def rule_move(self, rule_index):
-        """Return a compact rule as a move dictionary using 8x8 masks."""
-
-        index = self._check_index(rule_index)
-        from_mask = mask32_to64(self._mover_condition_mask(index))
-        to_mask = mask32_to64(self._mover_effect_mask(index))
-        captured32 = self.be_empty[index] & ~self._mover_condition_mask(index)
-        captured_mask = mask32_to64(captured32) if self.flags[index] & FLAG_CAPTURE else 0
-        from_row, from_col = square_from_mask(from_mask)
-        to_row, to_col = square_from_mask(to_mask)
-        return {
-            "from_mask": from_mask,
-            "to_mask": to_mask,
-            "captured_mask": captured_mask,
-            "dr": to_row - from_row,
-            "dc": to_col - from_col,
-            "is_capture": bool(self.flags[index] & FLAG_CAPTURE),
-        }
-
-    def _mover_condition_mask(self, index):
-        return self.is_black[index] if self.flags[index] & FLAG_BLACK_TO_MOVE else self.is_white[index]
-
-    def _mover_effect_mask(self, index):
-        return self.be_black[index] if self.flags[index] & FLAG_BLACK_TO_MOVE else self.be_white[index]
+        return {index: self.apply_rule(turn, index) for index in self.legal_rule_indices(turn)}
 
     def _check_index(self, rule_index):
         index = int(rule_index)
-        if not (0 <= index < len(self)):
+        if not (0 <= index < len(self.rules)):
             raise IndexError(f"rule index out of range: {rule_index!r}")
         return index
 
-    def _validate_lengths(self):
-        length = len(self.flags)
-        lengths = {
-            len(self.is_black),
-            len(self.is_white),
-            len(self.is_empty),
-            len(self.be_black),
-            len(self.be_white),
-            len(self.be_empty),
-            length,
-        }
-        if len(lengths) != 1:
-            raise ValueError("all rule arrays must have the same length")
 
-    def _build_side_index(self):
-        indexes = {0: [], 1: []}
-        for index, flags in enumerate(self.flags):
-            indexes[1 if flags & FLAG_BLACK_TO_MOVE else 0].append(index)
-        return {side: tuple(side_indexes) for side, side_indexes in indexes.items()}
+def as_board(board):
+    """Coerce a board-like object into :class:`Board`."""
 
-    def _build_metadata_index(self):
-        indexes = {}
-        for index, flags in enumerate(self.flags):
-            key = (
-                1 if flags & FLAG_BLACK_TO_MOVE else 0,
-                1 if flags & FLAG_KING else 0,
-                1 if flags & FLAG_PROMOTION else 0,
-                1 if flags & FLAG_CAPTURE else 0,
-            )
-            indexes.setdefault(key, []).append(index)
-        return {key: tuple(value) for key, value in indexes.items()}
+    if isinstance(board, Board):
+        return board
+    if isinstance(board, Mapping):
+        return Board(board["black"], board["white"], board.get("kings", 0))
+    return Board.from_tuple(board)
 
 
-def as_turn_state(state):
-    """Coerce a board-like object into :class:`TurnState`."""
+def as_turn(turn):
+    """Coerce a turn-like object into :class:`Turn`."""
 
-    if isinstance(state, TurnState):
-        return state
-    if isinstance(state, BoardState):
-        return TurnState.from_board_state(state)
-    if len(state) != 4:
-        raise ValueError("state must have four fields")
-    if state[3] in ("B", "W"):
-        return TurnState.from_board_state(state)
-    return TurnState.from_tuple(state)
+    if isinstance(turn, Turn):
+        return turn
+    if isinstance(turn, Mapping):
+        return Turn.from_masks(
+            turn["black"],
+            turn["white"],
+            turn.get("kings", 0),
+            turn.get("black_to_move", 1),
+            turn.get("metadata", ()),
+        )
+    return Turn.from_tuple(turn)
 
 
 def american_ruleset():
@@ -424,116 +599,171 @@ def american_ruleset():
 
     global _DEFAULT_AMERICAN_RULESET
     if _DEFAULT_AMERICAN_RULESET is None:
-        _DEFAULT_AMERICAN_RULESET = Ruleset.from_geometric_templates()
+        _DEFAULT_AMERICAN_RULESET = Ruleset.from_board_geometry()
     return _DEFAULT_AMERICAN_RULESET
 
 
-def _runtime_sides(side):
-    if side is None or str(side).lower() in ("both", "all"):
-        return ("B", "W")
-    if side not in ("B", "W"):
-        raise ValueError("side must be 'B', 'W', or 'both'")
-    return (side,)
+def _indexed_record(index, rule):
+    return {"rule_index": index, **rule.as_dict}
 
 
-def _template_requires_king(side, template):
-    dr = _row_delta(template)
-    return (side == "B" and dr < 0) or (side == "W" and dr > 0)
-
-
-def _runtime_row_from_template(template, side, king):
-    from_mask = int(template["from_mask"])
-    to_mask = int(template["to_mask"])
-    captured_mask = int(template.get("captured_mask", 0))
-    from32 = square_mask32_from64(from_mask)
-    to32 = square_mask32_from64(to_mask)
-    captured32 = square_mask32_from64(captured_mask)
-    promotion = not king and bool(to_mask & (BLACK_PROMO_MASK if side == "B" else WHITE_PROMO_MASK))
-
-    if side == "B":
-        is_black = from32
-        is_white = captured32
-        be_black = to32
-        be_white = 0
-    else:
-        is_black = captured32
-        is_white = from32
-        be_black = 0
-        be_white = to32
-
-    return {
-        "is_black": is_black,
-        "is_white": is_white,
-        "is_empty": to32,
-        "be_black": be_black,
-        "be_white": be_white,
-        "be_empty": from32 | captured32,
-        "black_to_move": 1 if side == "B" else 0,
-        "king": int(bool(king)),
-        "promotion": int(promotion),
-        "capture": int(bool(captured_mask)),
-    }
-
-
-def _row_delta(template):
-    from_row, _ = square_from_mask(int(template["from_mask"]))
-    to_row, _ = square_from_mask(int(template["to_mask"]))
-    return to_row - from_row
-
-
-def _uint32_array(values):
-    return array("I", (int(value) & MASK32 for value in values))
-
-
-def _uint8_array(values):
-    return array("B", (int(value) & 0xFF for value in values))
+def _coerce_rule(rule):
+    if isinstance(rule, Rule):
+        return rule
+    return Rule.from_record(rule)
 
 
 def _records_from_any(records):
     if isinstance(records, Ruleset):
-        return records.records()
-    if isinstance(records, dict):
-        return [records]
+        return records.rules
+    if isinstance(records, Rule):
+        return (records,)
+    if isinstance(records, Mapping):
+        return (records,)
     if hasattr(records, "to_dict") and hasattr(records, "columns"):
-        return list(records.to_dict("index").values())
-    if hasattr(records, "to_dict") and not isinstance(records, dict):
-        return [records.to_dict()]
+        return tuple(records.to_dict("records"))
+    if hasattr(records, "to_dict") and not isinstance(records, Mapping):
+        return (records.to_dict(),)
     return records
 
 
-def _flags_from_row(row):
-    flags = 0
-    if row["black_to_move"]:
-        flags |= FLAG_BLACK_TO_MOVE
-    if row["king"]:
-        flags |= FLAG_KING
-    if row["promotion"]:
-        flags |= FLAG_PROMOTION
-    if row["capture"]:
-        flags |= FLAG_CAPTURE
-    return flags
+def _rules_by_side(rules):
+    indexes = {0: [], 1: []}
+    for index, rule in enumerate(rules):
+        indexes[rule.conditions.black_to_move].append(index)
+    return {side: tuple(side_indexes) for side, side_indexes in indexes.items()}
 
 
-def _flag_matches(flags, flag, requested):
-    return requested is None or bool(flags & flag) == bool(requested)
+def _rules_by_metadata(rules):
+    indexes = {}
+    for index, rule in enumerate(rules):
+        key = (
+            rule.conditions.black_to_move,
+            rule.conditions.king,
+            rule.effects.promotion,
+            rule.effects.capture,
+        )
+        indexes.setdefault(key, []).append(index)
+    return {key: tuple(value) for key, value in indexes.items()}
 
 
-def _coerce_mask32(mask):
-    mask = int(mask)
-    if mask & ~MASK32:
-        validate_position(mask, 0, 0)
-        return mask64_to32(mask)
-    return mask & MASK32
+def _metadata_matches(rule, black_to_move, king, promotion, capture):
+    return (
+        _match_flag(rule.conditions.black_to_move, black_to_move)
+        and _match_flag(rule.conditions.king, king)
+        and _match_flag(rule.effects.promotion, promotion)
+        and _match_flag(rule.effects.capture, capture)
+    )
 
 
-def _black_to_move_bit(value):
-    if value in ("B", "black"):
+def _match_flag(value, requested):
+    return requested is None or bool(value) == bool(requested)
+
+
+_DIRECTIONS = ((-1, -1), (-1, 1), (1, -1), (1, 1))
+
+
+def _runtime_sides(side):
+    if side is None or str(side).lower() in ("both", "all"):
+        return (1, 0)
+    return (_turn_bit(side),)
+
+
+def _compact_move_templates():
+    templates = []
+    seen = set()
+    for row in range(8):
+        for col in range(8):
+            if not is_playable_square(row, col):
+                continue
+            from_mask = square_mask32(row, col)
+            for dr, dc in _DIRECTIONS:
+                to_row = row + dr
+                to_col = col + dc
+                if is_playable_square(to_row, to_col):
+                    _add_template(templates, seen, from_mask, square_mask32(to_row, to_col), 0, dr, dc)
+
+                jump_row = row + 2 * dr
+                jump_col = col + 2 * dc
+                captured_row = row + dr
+                captured_col = col + dc
+                if is_playable_square(jump_row, jump_col):
+                    _add_template(
+                        templates,
+                        seen,
+                        from_mask,
+                        square_mask32(jump_row, jump_col),
+                        square_mask32(captured_row, captured_col),
+                        2 * dr,
+                        2 * dc,
+                    )
+    return templates
+
+
+def _add_template(templates, seen, from_mask, to_mask, captured_mask, dr, dc):
+    key = (from_mask, to_mask, captured_mask)
+    if key in seen:
+        return
+    seen.add(key)
+    templates.append(
+        {
+            "from_mask": from_mask,
+            "to_mask": to_mask,
+            "captured_mask": captured_mask,
+            "dr": dr,
+            "dc": dc,
+        }
+    )
+
+
+def _template_requires_king(black_to_move, template):
+    dr = int(template["dr"])
+    return (black_to_move and dr < 0) or (not black_to_move and dr > 0)
+
+
+def _rule_from_template(template, black_to_move, king):
+    from_mask = int(template["from_mask"])
+    to_mask = int(template["to_mask"])
+    captured_mask = int(template["captured_mask"])
+    to_row, _ = square_from_mask32(to_mask)
+    promotion = not king and _promotion_row(black_to_move, to_row)
+
+    if black_to_move:
+        conditions = Conditions(from_mask, captured_mask, to_mask, 1, king)
+        effects = Effects(to_mask, 0, from_mask | captured_mask, promotion, bool(captured_mask))
+    else:
+        conditions = Conditions(captured_mask, from_mask, to_mask, 0, king)
+        effects = Effects(0, to_mask, from_mask | captured_mask, promotion, bool(captured_mask))
+    return Rule(conditions, effects)
+
+
+def _promotion_row(black_to_move, row):
+    return (black_to_move and row == 7) or (not black_to_move and row == 0)
+
+
+def _mask32(value, name):
+    value = int(value)
+    if value < 0 or value & ~MASK32:
+        raise ValueError(f"{name} must fit in a 32-bit playable-square bitmap")
+    return value
+
+
+def _turn_bit(value):
+    if value in ("B", "black", "Black"):
         return 1
-    if value in ("W", "white"):
+    if value in ("W", "white", "White"):
         return 0
     if value in (0, 1, False, True):
         return int(bool(value))
-    raise ValueError("black_to_move must be 0, 1, 'B', or 'W'")
+    raise ValueError("side to move must be 0, 1, 'black', or 'white'")
+
+
+def _metadata_tuple(metadata):
+    if metadata in (None, ()):
+        return ()
+    if isinstance(metadata, Mapping):
+        return tuple(sorted(metadata.items()))
+    return tuple(metadata)
 
 
 _DEFAULT_AMERICAN_RULESET = None
