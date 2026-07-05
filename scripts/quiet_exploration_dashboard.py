@@ -8,7 +8,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from run_quiet_exploration import METRIC_FIELDS
-from pycheckers import QuietPositionGraph
+from pycheckers.quiet import QuietPositionGraph
 
 
 HTML = """<!doctype html>

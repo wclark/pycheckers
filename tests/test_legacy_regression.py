@@ -9,18 +9,20 @@ from pycheckers import (
     bitboards_from_ascii,
     bits_from_grid,
     capture_chains,
-    expand_quiet_man_states,
-    explore_quiet_man_positions,
     generate_move_templates,
     grid_from_bits,
     initial_position,
-    is_quiet_man_state,
     legal_moves,
     legal_turns,
     square_mask,
     validate_position,
 )
-from pycheckers import (
+from pycheckers.bitboard import (
+    expand_quiet_man_states,
+    explore_quiet_man_positions,
+    is_quiet_man_state,
+)
+from pycheckers.quiet import (
     FORCED_CAPTURE,
     FORCED_CAPTURE_PROMOTION,
     PROMOTION,

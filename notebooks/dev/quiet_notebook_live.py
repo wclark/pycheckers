@@ -4,7 +4,7 @@ import json
 import time
 from pathlib import Path
 
-from pycheckers import (
+from pycheckers.bitboard import (
     expand_quiet_man_states,
     initial_position,
     is_dark,

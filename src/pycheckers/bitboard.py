@@ -514,7 +514,6 @@ def bitboards_from_ascii(board):
 
 def show_board(black, white, kings, dots=0, other=None, size=3):
     import matplotlib.pyplot as plt
-    from matplotlib.patches import Circle, Rectangle
 
     n = 2 if other is not None else 1
     board_size = {1: 2.5, 2: 3.25, 3: 4}.get(size, 4)
@@ -534,64 +533,71 @@ def show_board(black, white, kings, dots=0, other=None, size=3):
         boards.append((ob, ow, ok, od))
 
     for ax, (bmask, wmask, kmask, dmask) in zip(axes, boards):
-        bmask &= MASK64
-        wmask &= MASK64
-        kmask &= MASK64
-        dmask &= MASK64
-        ax.set_xlim(-0.02, 8.02)
-        ax.set_ylim(-0.02, 8.02)
-        ax.set_aspect("equal")
-        ax.axis("off")
-
-        for r in range(8):
-            for c in range(8):
-                y = 7 - r
-                bit = square_mask(r, c)
-                fill = "#dddddd" if is_dark(r, c) else "white"
-                ax.add_patch(Rectangle((c, y), 1, 1, fc=fill, ec="black", lw=1))
-
-                if (bmask | wmask) & bit:
-                    is_black = bool(bmask & bit)
-                    piece_fill = "black" if is_black else "white"
-                    edge = "white" if is_black else "black"
-                    ax.add_patch(
-                        Circle(
-                            (c + 0.5, y + 0.5),
-                            0.38,
-                            fc=piece_fill,
-                            ec=edge,
-                            lw=1.2,
-                        )
-                    )
-                    if kmask & bit:
-                        ax.text(
-                            c + 0.5,
-                            y + 0.5,
-                            "K",
-                            ha="center",
-                            va="center",
-                            fontsize=11,
-                            color=edge,
-                            weight="bold",
-                        )
-                elif dmask & bit:
-                    ax.add_patch(
-                        Circle(
-                            (c + 0.5, y + 0.5),
-                            0.34,
-                            fill=False,
-                            ec="black",
-                            lw=1,
-                            ls=":",
-                        )
-                    )
-
-        ax.add_patch(
-            Rectangle((0, 0), 8, 8, fill=False, ec="black", lw=1.5, clip_on=False)
-        )
+        draw_board(ax, bmask, wmask, kmask, dots=dmask)
 
     plt.show()
     return fig, axes
+
+
+def draw_board(ax, black, white, kings, dots=0, title=None):
+    from matplotlib.patches import Circle, Rectangle
+
+    black &= MASK64
+    white &= MASK64
+    kings &= MASK64
+    dots &= MASK64
+    ax.set_xlim(-0.02, 8.02)
+    ax.set_ylim(-0.02, 8.02)
+    ax.set_aspect("equal")
+    ax.axis("off")
+
+    for r in range(8):
+        for c in range(8):
+            y = 7 - r
+            bit = square_mask(r, c)
+            fill = "#dddddd" if is_dark(r, c) else "white"
+            ax.add_patch(Rectangle((c, y), 1, 1, fc=fill, ec="black", lw=1))
+
+            if (black | white) & bit:
+                is_black_piece = bool(black & bit)
+                piece_fill = "black" if is_black_piece else "white"
+                edge = "white" if is_black_piece else "black"
+                ax.add_patch(
+                    Circle(
+                        (c + 0.5, y + 0.5),
+                        0.38,
+                        fc=piece_fill,
+                        ec=edge,
+                        lw=1.2,
+                    )
+                )
+                if kings & bit:
+                    ax.text(
+                        c + 0.5,
+                        y + 0.5,
+                        "K",
+                        ha="center",
+                        va="center",
+                        fontsize=11,
+                        color=edge,
+                        weight="bold",
+                    )
+            elif dots & bit:
+                ax.add_patch(
+                    Circle(
+                        (c + 0.5, y + 0.5),
+                        0.34,
+                        fill=False,
+                        ec="black",
+                        lw=1,
+                        ls=":",
+                    )
+                )
+
+    ax.add_patch(Rectangle((0, 0), 8, 8, fill=False, ec="black", lw=1.5, clip_on=False))
+    if title:
+        ax.set_title(title)
+    return ax
 
 
 def _applicable_moves(
