@@ -19,6 +19,7 @@ from .bitboard import (
     legal_moves,
     legal_turns,
     show_board,
+    square_from_mask,
     square_mask,
     validate_position,
 )
@@ -84,6 +85,7 @@ __all__ = [
     "show_board",
     "split_state_key",
     "square32_to64",
+    "square_from_mask",
     "square64_to32",
     "square_mask",
     "state_key_record",
