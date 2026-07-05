@@ -1,6 +1,11 @@
 """Rule-inspection helpers built around :class:`pycheckers.BoardState`."""
 
-from .bitboard import square_from_mask
+from .bitboard import (
+    BLACK_PROMO_MASK,
+    WHITE_PROMO_MASK,
+    generate_move_templates,
+    square_from_mask,
+)
 from .state import as_state
 
 
@@ -57,6 +62,69 @@ def state_record(state, prefix=""):
     }
 
 
+def primitive_move_records():
+    rows = []
+    move_id = 0
+    for side in ("B", "W"):
+        for piece_type in ("man", "king"):
+            for template in generate_move_templates():
+                if not _piece_can_use_template(side, piece_type, template):
+                    continue
+                rows.append(primitive_move_record(template, side, piece_type, move_id))
+                move_id += 1
+    return rows
+
+
+def primitive_move_record(move, side, piece_type, move_id=None):
+    record = move_record(move)
+    record.update(
+        {
+            "move_id": move_id,
+            "side": side,
+            "piece_type": piece_type,
+            "is_king": piece_type == "king",
+            "promotes": _template_promotes(side, piece_type, move),
+            "from_square": _square_index(move["from_mask"]),
+            "to_square": _square_index(move["to_mask"]),
+            "captured_square": (
+                None if not move["captured_mask"] else _square_index(move["captured_mask"])
+            ),
+        }
+    )
+    return record
+
+
+def primitive_move_catalog_df():
+    import pandas as pd
+
+    columns = [
+        "move_id",
+        "side",
+        "piece_type",
+        "is_king",
+        "is_capture",
+        "promotes",
+        "from_square",
+        "from_r",
+        "from_c",
+        "to_square",
+        "to_r",
+        "to_c",
+        "captured_square",
+        "captured_r",
+        "captured_c",
+        "dr",
+        "dc",
+        "from_mask",
+        "from_mask_hex",
+        "to_mask",
+        "to_mask_hex",
+        "captured_mask",
+        "captured_mask_hex",
+    ]
+    return pd.DataFrame.from_records(primitive_move_records(), columns=columns)
+
+
 def moves_df(state, moves=None):
     import pandas as pd
 
@@ -90,6 +158,27 @@ def legal_successors(state):
 def _move_promotes_for_state(state, move):
     next_state = state.apply_move(move, switch_side=False)
     return bool(next_state.kings & move["to_mask"] and not state.kings & move["from_mask"])
+
+
+def _piece_can_use_template(side, piece_type, move):
+    if piece_type == "king":
+        return True
+    if side == "B":
+        return move["dr"] > 0
+    if side == "W":
+        return move["dr"] < 0
+    raise ValueError("side must be 'B' or 'W'")
+
+
+def _template_promotes(side, piece_type, move):
+    if piece_type == "king":
+        return False
+    promo_mask = BLACK_PROMO_MASK if side == "B" else WHITE_PROMO_MASK
+    return bool(move["to_mask"] & promo_mask)
+
+
+def _square_index(mask):
+    return mask.bit_length() - 1
 
 
 def _mask_hex(mask):

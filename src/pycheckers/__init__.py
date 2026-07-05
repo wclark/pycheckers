@@ -22,7 +22,16 @@ from .bitboard import (
     validate_position,
 )
 from .display import show_move_rows, show_state, show_turn, show_turn_rows
-from .rules import legal_successors, move_record, moves_df, state_record, turns_df
+from .rules import (
+    legal_successors,
+    move_record,
+    moves_df,
+    primitive_move_catalog_df,
+    primitive_move_record,
+    primitive_move_records,
+    state_record,
+    turns_df,
+)
 from .state import BoardState, as_state
 
 __version__ = "0.1.0"
@@ -49,6 +58,9 @@ __all__ = [
     "legal_turns",
     "move_record",
     "moves_df",
+    "primitive_move_catalog_df",
+    "primitive_move_record",
+    "primitive_move_records",
     "show_board",
     "show_move_rows",
     "show_state",

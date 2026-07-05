@@ -34,7 +34,7 @@ python -m unittest discover -s tests -v
 
 The package code is under `src/pycheckers`. Tests live under `tests`.
 Notebook material lives under `notebooks`; the main notebook is
-`notebooks/rules_and_board_validation.ipynb`.
+`notebooks/primitive_move_catalog.ipynb`.
 
 Development-only tablebase notebooks and helpers live under `notebooks/dev`.
 
@@ -49,7 +49,10 @@ python -m unittest discover -s tests -v
 ## Minimal Example
 
 ```python
-from pycheckers import BoardState, moves_df, show_state, show_turn
+from pycheckers import BoardState, moves_df, primitive_move_catalog_df, show_state, show_turn
+
+all_primitive_moves = primitive_move_catalog_df()
+print(len(all_primitive_moves))
 
 state = BoardState.initial()
 show_state(state)

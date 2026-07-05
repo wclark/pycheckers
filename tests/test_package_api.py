@@ -6,6 +6,8 @@ from pycheckers import (
     BoardState,
     legal_successors,
     moves_df,
+    primitive_move_catalog_df,
+    primitive_move_records,
     show_move_rows,
     show_state,
     show_turn,
@@ -78,6 +80,28 @@ class PackageApiTests(unittest.TestCase):
         self.assertTrue(df["promotes"].all())
         self.assertTrue(all(successor.king_count == 1 for successor in successors))
         self.assertTrue(all(successor.side == "W" for successor in successors))
+
+    def test_primitive_move_catalog_lists_side_piece_moves(self):
+        records = primitive_move_records()
+        df = primitive_move_catalog_df()
+
+        self.assertEqual(len(records), 510)
+        self.assertEqual(len(df), 510)
+        self.assertEqual(
+            df.groupby(["side", "piece_type"]).size().to_dict(),
+            {
+                ("B", "king"): 170,
+                ("B", "man"): 85,
+                ("W", "king"): 170,
+                ("W", "man"): 85,
+            },
+        )
+        self.assertEqual(df["is_capture"].sum(), 216)
+        self.assertEqual((~df["is_capture"]).sum(), 294)
+        self.assertTrue((df[df["piece_type"] == "man"].query("side == 'B'")["dr"] > 0).all())
+        self.assertTrue((df[df["piece_type"] == "man"].query("side == 'W'")["dr"] < 0).all())
+        self.assertTrue(df["from_mask_hex"].str.startswith("0x").all())
+        self.assertTrue(df["to_mask_hex"].str.startswith("0x").all())
 
     def test_display_helpers_return_figures(self):
         state = BoardState.initial()
