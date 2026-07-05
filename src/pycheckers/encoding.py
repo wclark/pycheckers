@@ -1,82 +1,56 @@
-"""32-bit playable-square encodings for checkers boards."""
-
-from .bitboard import square_from_mask
+"""Native 32-bit playable-square encodings for checkers boards."""
 
 MASK32 = (1 << 32) - 1
 
 
-def _build_row_tables():
-    row64_to_nibble = [[0] * 256 for _ in range(2)]
-    nibble_to_row64 = [[0] * 16 for _ in range(2)]
+def is_playable_square(row, col):
+    """Return whether ``(row, col)`` is one of the 32 playable board squares."""
 
-    for parity in (0, 1):
-        cols = (1, 3, 5, 7) if parity == 0 else (0, 2, 4, 6)
-        for row_byte in range(256):
-            nibble = 0
-            for offset, col in enumerate(cols):
-                if row_byte & (1 << col):
-                    nibble |= 1 << offset
-            row64_to_nibble[parity][row_byte] = nibble
-
-        for nibble in range(16):
-            row_byte = 0
-            for offset, col in enumerate(cols):
-                if nibble & (1 << offset):
-                    row_byte |= 1 << col
-            nibble_to_row64[parity][nibble] = row_byte
-
-    return row64_to_nibble, nibble_to_row64
+    return 0 <= int(row) < 8 and 0 <= int(col) < 8 and (int(row) + int(col)) % 2 == 1
 
 
-ROW64_TO_NIBBLE, NIBBLE_TO_ROW64 = _build_row_tables()
+def square_index32(row, col):
+    """Return the 0-based playable-square index for ``(row, col)``."""
 
-
-def mask64_to32(mask):
-    """Pack an 8x8 board mask into the 32 playable squares."""
-
-    result = 0
-    for row in range(8):
-        row_byte = (int(mask) >> (8 * row)) & 0xFF
-        result |= ROW64_TO_NIBBLE[row & 1][row_byte] << (4 * row)
-    return result & MASK32
-
-
-def mask32_to64(mask):
-    """Expand a playable-square mask back to the 8x8 board layout."""
-
-    mask = int(mask) & MASK32
-    result = 0
-    for row in range(8):
-        nibble = (mask >> (4 * row)) & 0xF
-        result |= NIBBLE_TO_ROW64[row & 1][nibble] << (8 * row)
-    return result
-
-
-def square64_to32(mask):
-    """Return the playable-square index for a one-bit 8x8 board mask."""
-
-    if not mask:
-        return None
-    row, col = square_from_mask(int(mask))
-    if (row + col) % 2 != 1:
-        raise ValueError("square is not playable")
+    row = int(row)
+    col = int(col)
+    if not is_playable_square(row, col):
+        raise ValueError(f"square is not playable: {(row, col)}")
     return row * 4 + (col // 2)
 
 
-def square32_to64(square):
-    """Return an 8x8 one-bit mask for a playable-square index."""
+def square_mask32(row, col):
+    """Return a one-bit 32-bit mask for a playable board square."""
 
-    if not (0 <= int(square) < 32):
+    return 1 << square_index32(row, col)
+
+
+def square_coords32(square):
+    """Return ``(row, col)`` for a playable-square index."""
+
+    square = int(square)
+    if not (0 <= square < 32):
         raise ValueError(f"square out of range: {square!r}")
-    row, offset = divmod(int(square), 4)
+    row, offset = divmod(square, 4)
     col = 2 * offset + (1 if row % 2 == 0 else 0)
-    return 1 << (8 * row + col)
+    return row, col
 
 
-def square_mask32_from64(mask):
-    """Convert a one-bit 8x8 board mask into a one-bit playable-square mask."""
+def square_from_mask32(mask):
+    """Return ``(row, col)`` for a one-bit 32-bit playable-square mask."""
 
-    square = square64_to32(mask)
-    if square is None:
-        return 0
-    return 1 << square
+    mask = int(mask)
+    if mask <= 0 or mask & (mask - 1):
+        raise ValueError("mask must contain exactly one bit")
+    square = mask.bit_length() - 1
+    if square >= 32:
+        raise ValueError("mask is outside the playable-square board")
+    return square_coords32(square)
+
+
+def playable_squares():
+    """Return all playable squares as ``(row, col, mask)`` tuples."""
+
+    return tuple(
+        (row, col, square_mask32(row, col)) for row in range(8) for col in range(8) if is_playable_square(row, col)
+    )
