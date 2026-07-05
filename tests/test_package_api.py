@@ -88,6 +88,23 @@ class PackageApiTests(unittest.TestCase):
         self.assertEqual(len(records), 510)
         self.assertEqual(len(df), 510)
         self.assertEqual(
+            list(df.columns),
+            [
+                "move_id",
+                "side",
+                "piece_type",
+                "is_king",
+                "is_capture",
+                "promotes",
+                "from_mask",
+                "from_mask_hex",
+                "to_mask",
+                "to_mask_hex",
+                "captured_mask",
+                "captured_mask_hex",
+            ],
+        )
+        self.assertEqual(
             df.groupby(["side", "piece_type"]).size().to_dict(),
             {
                 ("B", "king"): 170,
@@ -98,8 +115,8 @@ class PackageApiTests(unittest.TestCase):
         )
         self.assertEqual(df["is_capture"].sum(), 216)
         self.assertEqual((~df["is_capture"]).sum(), 294)
-        self.assertTrue((df[df["piece_type"] == "man"].query("side == 'B'")["dr"] > 0).all())
-        self.assertTrue((df[df["piece_type"] == "man"].query("side == 'W'")["dr"] < 0).all())
+        self.assertTrue((df.loc[~df["is_capture"], "captured_mask"] == 0).all())
+        self.assertTrue((df.loc[df["is_capture"], "captured_mask"] != 0).all())
         self.assertTrue(df["from_mask_hex"].str.startswith("0x").all())
         self.assertTrue(df["to_mask_hex"].str.startswith("0x").all())
 

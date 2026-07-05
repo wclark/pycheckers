@@ -76,22 +76,21 @@ def primitive_move_records():
 
 
 def primitive_move_record(move, side, piece_type, move_id=None):
-    record = move_record(move)
-    record.update(
-        {
-            "move_id": move_id,
-            "side": side,
-            "piece_type": piece_type,
-            "is_king": piece_type == "king",
-            "promotes": _template_promotes(side, piece_type, move),
-            "from_square": _square_index(move["from_mask"]),
-            "to_square": _square_index(move["to_mask"]),
-            "captured_square": (
-                None if not move["captured_mask"] else _square_index(move["captured_mask"])
-            ),
-        }
-    )
-    return record
+    captured = move.get("captured_mask", 0)
+    return {
+        "move_id": move_id,
+        "side": side,
+        "piece_type": piece_type,
+        "is_king": piece_type == "king",
+        "is_capture": bool(move["is_capture"]),
+        "promotes": _template_promotes(side, piece_type, move),
+        "from_mask": move["from_mask"],
+        "from_mask_hex": _mask_hex(move["from_mask"]),
+        "to_mask": move["to_mask"],
+        "to_mask_hex": _mask_hex(move["to_mask"]),
+        "captured_mask": captured,
+        "captured_mask_hex": _mask_hex(captured),
+    }
 
 
 def primitive_move_catalog_df():
@@ -104,17 +103,6 @@ def primitive_move_catalog_df():
         "is_king",
         "is_capture",
         "promotes",
-        "from_square",
-        "from_r",
-        "from_c",
-        "to_square",
-        "to_r",
-        "to_c",
-        "captured_square",
-        "captured_r",
-        "captured_c",
-        "dr",
-        "dc",
         "from_mask",
         "from_mask_hex",
         "to_mask",
@@ -175,10 +163,6 @@ def _template_promotes(side, piece_type, move):
         return False
     promo_mask = BLACK_PROMO_MASK if side == "B" else WHITE_PROMO_MASK
     return bool(move["to_mask"] & promo_mask)
-
-
-def _square_index(mask):
-    return mask.bit_length() - 1
 
 
 def _mask_hex(mask):
