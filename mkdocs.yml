@@ -1,0 +1,24 @@
+site_name: pycheckers
+site_description: American checkers board-state, rule-generation, and inspection tools.
+repo_url: https://github.com/wclark/pycheckers
+
+theme:
+  name: readthedocs
+
+nav:
+  - Overview: index.md
+  - Rulesets: rulesets.md
+  - API Reference: api.md
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          paths:
+            - src
+          options:
+            members_order: source
+            separate_signature: true
+            show_signature_annotations: true
+            show_source: true

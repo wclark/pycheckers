@@ -6,6 +6,7 @@ from .bitboard import (
     generate_move_templates,
     square_from_mask,
 )
+from .ruleset import FLAG_KING, Ruleset, american_ruleset
 from .state import BoardState, as_state
 
 
@@ -128,6 +129,16 @@ def primitive_rule_applies(state, rule):
 
 
 def applicable_primitive_rules(state, rules=None, mandatory_capture=False, captures_only=False, from_mask=None):
+    if rules is None:
+        ruleset = american_ruleset()
+        if mandatory_capture:
+            indexes = ruleset.legal_rule_indices(state, from_mask=from_mask)
+            if captures_only:
+                indexes = [index for index in indexes if ruleset.record(index)["capture"]]
+        else:
+            indexes = ruleset.matching_rule_indices(state, captures_only=captures_only, from_mask=from_mask)
+        return [ruleset.rule_move(index) for index in indexes]
+
     matches = []
     for rule in _rule_records(rules):
         if captures_only and not rule["is_capture"]:
@@ -178,79 +189,27 @@ def primitive_rule_move(rule):
 
 def primitive_rule_runtime_record(state, rule, rule_index=None):
     state = as_state(state)
-    from_mask = int(rule["from_mask"])
-    to_mask = int(rule["to_mask"])
-    captured_mask = int(rule["captured_mask"])
-    king = int(bool(state.kings & from_mask))
-    promotion = int(primitive_rule_promotes(state, rule))
-    capture = int(bool(captured_mask))
-
-    if state.side == "B":
-        is_black = from_mask
-        is_white = captured_mask
-        be_black = to_mask
-        be_white = 0
-    else:
-        is_white = from_mask
-        is_black = captured_mask
-        be_black = 0
-        be_white = to_mask
-
-    be_empty = from_mask | captured_mask
-
-    return {
-        "rule_index": _rule_index(rule, rule_index),
-        "is_black": is_black,
-        "is_white": is_white,
-        "is_empty": to_mask,
-        "be_black": be_black,
-        "be_white": be_white,
-        "be_empty": be_empty,
-        "black_to_move": 1 if state.side == "B" else 0,
-        "king": king,
-        "promotion": promotion,
-        "capture": capture,
-    }
+    ruleset = Ruleset.from_geometric_templates(side=state.side, templates=[rule])
+    king = bool(state.kings & int(rule["from_mask"]))
+    matching_indexes = [index for index in range(len(ruleset)) if bool(ruleset.flags[index] & FLAG_KING) == king]
+    if not matching_indexes:
+        raise ValueError("rule cannot be represented for the provided state")
+    row_index = matching_indexes[0]
+    record = ruleset.record(row_index)
+    record["rule_index"] = _rule_index(rule, rule_index)
+    return record
 
 
 def primitive_rule_runtime_records(side="both", rules=None):
-    rule_rows = _rule_records(rules)
-    records = []
-    for runtime_side in _runtime_sides(side):
-        for rule in rule_rows:
-            if not primitive_rule_requires_king(runtime_side, rule):
-                man_state = primitive_rule_state(rule, side=runtime_side)
-                records.append(primitive_rule_runtime_record(man_state, rule, rule_index=len(records)))
-
-            king_state = primitive_rule_state(rule, side=runtime_side)
-            king_state = BoardState(
-                king_state.black,
-                king_state.white,
-                king_state.kings | int(rule["from_mask"]),
-                runtime_side,
-            )
-            records.append(primitive_rule_runtime_record(king_state, rule, rule_index=len(records)))
-    return records
+    if rules is None and (side is None or str(side).lower() in ("both", "all")):
+        return american_ruleset().records()
+    return Ruleset.from_geometric_templates(side=side, templates=_rule_records(rules)).records()
 
 
 def primitive_rule_runtime_catalog_df(side="both", rules=None):
-    import pandas as pd
-
-    columns = [
-        "is_black",
-        "is_white",
-        "is_empty",
-        "be_black",
-        "be_white",
-        "be_empty",
-        "black_to_move",
-        "king",
-        "promotion",
-        "capture",
-    ]
-    records = primitive_rule_runtime_records(side=side, rules=rules)
-    df = pd.DataFrame.from_records(records, columns=["rule_index", *columns])
-    return df.set_index("rule_index").rename_axis(None)
+    if rules is None and (side is None or str(side).lower() in ("both", "all")):
+        return american_ruleset().to_dataframe()
+    return Ruleset.from_geometric_templates(side=side, templates=_rule_records(rules)).to_dataframe()
 
 
 def moves_df(state, moves=None):

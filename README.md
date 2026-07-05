@@ -8,7 +8,8 @@ The package is currently focused on a simple, inspectable core:
 
 - immutable `BoardState` objects;
 - black, white, and king bitboards plus side to move;
-- 170 side-independent primitive diagonal move templates;
+- 32-bit playable-square `TurnState` objects;
+- a compact `Ruleset` object for primitive diagonal move rules;
 - legal move and legal turn generation;
 - mandatory capture;
 - multi-jump capture turns;
@@ -27,6 +28,7 @@ python -m compileall -q src tests scripts
 ruff check src tests scripts
 ruff format --check src tests scripts
 pytest --cov=pycheckers --cov-report=term-missing
+mkdocs build --strict
 ```
 
 ## Repository Layout
@@ -47,28 +49,41 @@ python -m unittest discover -s tests -v
 
 The CI path uses `pytest` with coverage reporting and `ruff` for lint and
 format checks. Coverage is gated at 82%, just below the current 82.68% baseline,
-so the floor can be ratcheted toward full line coverage.
+so the floor can be ratcheted toward full line coverage. API docs are built
+with MkDocs and mkdocstrings.
+
+## API Documentation
+
+Build the API docs locally with:
+
+```powershell
+mkdocs build --strict
+```
+
+The `docs` GitHub Actions workflow builds docs on pull requests and deploys the
+site from `main` through GitHub Pages. In the repository settings, Pages should
+use GitHub Actions as its source.
 
 ## Minimal Example
 
 ```python
 from pycheckers import (
     BoardState,
+    Ruleset,
     moves_df,
-    primitive_rule_runtime_catalog_df,
-    show_primitive_rule_rows,
     show_state,
     show_turn,
 )
 
-runtime_rules = primitive_rule_runtime_catalog_df()
+ruleset = Ruleset.american()
+runtime_rules = ruleset.to_dataframe()
 print(len(runtime_rules))
-show_primitive_rule_rows(runtime_rules.iloc[:3])
+ruleset.plot(runtime_rules.iloc[:3])
 
 state = BoardState.initial()
 show_state(state)
 
-moves = state.legal_moves()
+moves = ruleset.legal_moves(state)
 print(moves_df(state))
 
 turn = state.legal_turns()[0]

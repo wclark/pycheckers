@@ -39,6 +39,10 @@ notebook = [
   "matplotlib>=3.7",
   "nbformat>=5",
 ]
+docs = [
+  "mkdocs>=1.6",
+  "mkdocstrings[python]>=0.27",
+]
 test = [
   "coverage[toml]>=7",
   "matplotlib>=3.7",
@@ -51,6 +55,8 @@ dev = [
   "build>=1",
   "coverage[toml]>=7",
   "matplotlib>=3.7",
+  "mkdocs>=1.6",
+  "mkdocstrings[python]>=0.27",
   "nbclient>=0.10",
   "nbformat>=5",
   "pandas>=2.0",
