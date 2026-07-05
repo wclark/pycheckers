@@ -8,7 +8,6 @@ from .bitboard import (
     square_from_mask,
 )
 
-
 MASK32 = (1 << 32) - 1
 BLACK_SHIFT = 0
 WHITE_SHIFT = 32
@@ -321,10 +320,7 @@ class QuietPositionGraph:
 
     @property
     def boundary_states(self):
-        return {
-            self.state_to_index[state_key]: dict(info)
-            for state_key, info in self.boundary_state_info.items()
-        }
+        return {self.state_to_index[state_key]: dict(info) for state_key, info in self.boundary_state_info.items()}
 
     @property
     def transitions(self):
@@ -664,10 +660,7 @@ class QuietPositionGraph:
         return [decode_state_key(state_key) for state_key in sorted(self.terminal_keys, key=_state_key_sort_key)]
 
     def boundary_list(self):
-        return [
-            decode_state_key(state_key)
-            for state_key in sorted(self.boundary_state_info, key=_state_key_sort_key)
-        ]
+        return [decode_state_key(state_key) for state_key in sorted(self.boundary_state_info, key=_state_key_sort_key)]
 
     def terminal_state(self, index=0):
         terminal_key = sorted(self.terminal_keys, key=_state_key_sort_key)[index]
@@ -795,8 +788,7 @@ class QuietPositionGraph:
                 "next_index": to_index,
                 "round": round_number,
                 "created_next_state": (
-                    self.first_parent_key.get(to_key) == from_key
-                    and self.state_created_round[to_index] == round_number
+                    self.first_parent_key.get(to_key) == from_key and self.state_created_round[to_index] == round_number
                 ),
                 "predecessor_depth": _quiet_state_depth_from_key(from_key),
                 "next_depth": _quiet_state_depth_from_key(to_key),
@@ -892,8 +884,7 @@ class QuietPositionGraph:
                 counts[state_index] = 1
             else:
                 counts[state_index] = sum(
-                    counts[self.state_to_index[predecessor_key]]
-                    for predecessor_key in predecessors
+                    counts[self.state_to_index[predecessor_key]] for predecessor_key in predecessors
                 )
         self._path_counts = counts
         return counts
@@ -1031,7 +1022,9 @@ class QuietPositionGraph:
     def path_to_terminal(self, index=0):
         terminal_key = sorted(self.terminal_keys, key=_state_key_sort_key)[index]
         terminal_index = self.state_to_index[terminal_key]
-        return [decode_state_key(self.state_keys[state_index]) for state_index in self.path_to_state_index(terminal_index)]
+        return [
+            decode_state_key(self.state_keys[state_index]) for state_index in self.path_to_state_index(terminal_index)
+        ]
 
     def show_state(self, state_or_index, dots=0, size=1.5):
         if isinstance(state_or_index, int) and 0 <= state_or_index < len(self.state_keys):
@@ -1059,15 +1052,15 @@ class QuietPositionGraph:
             if which == "expanded":
                 return [self.state_to_index[state_key] for state_key in self.expanded_keys]
             if which == "terminal":
-                return [self.state_to_index[state_key] for state_key in sorted(self.terminal_keys, key=_state_key_sort_key)]
+                return [
+                    self.state_to_index[state_key] for state_key in sorted(self.terminal_keys, key=_state_key_sort_key)
+                ]
             if which == "boundary":
                 return [
                     self.state_to_index[state_key]
                     for state_key in sorted(self.boundary_state_info, key=_state_key_sort_key)
                 ]
-            raise ValueError(
-                "which must be 'all', 'frontier', 'expanded', 'terminal', or 'boundary'"
-            )
+            raise ValueError("which must be 'all', 'frontier', 'expanded', 'terminal', or 'boundary'")
         return list(which)
 
     def _iter_quiet_edges(self):
@@ -1140,9 +1133,7 @@ def inspect_game_state(state, pieces_per_side=12):
     """
     state_key = normalize_state_key(state)
     if not _is_supported_man_source_key(state_key, pieces_per_side=pieces_per_side):
-        raise ValueError(
-            "state must be a man-only packed state with the configured piece counts"
-        )
+        raise ValueError("state must be a man-only packed state with the configured piece counts")
     return _inspect_game_state_key(state_key)
 
 
@@ -1185,10 +1176,7 @@ def _inspect_game_state_key(state_key):
         metadata = FORCED_CAPTURE_PROMOTION if move[MOVE_PROMOTES] else FORCED_CAPTURE
         metadata_successors[metadata].add(next_key)
 
-    forced_capture = bool(
-        metadata_successors[FORCED_CAPTURE]
-        or metadata_successors[FORCED_CAPTURE_PROMOTION]
-    )
+    forced_capture = bool(metadata_successors[FORCED_CAPTURE] or metadata_successors[FORCED_CAPTURE_PROMOTION])
     if forced_capture:
         return {
             "state_key": state_key,
@@ -1242,7 +1230,7 @@ def _apply_move32_to_key(state_key, move):
         next_white32 = (white32 & ~from_bit) | to_bit
 
     mover_was_king = bool(kings32 & from_bit)
-    next_kings32 = (kings32 & ~from_bit & ~captured_bit)
+    next_kings32 = kings32 & ~from_bit & ~captured_bit
     if mover_was_king or move[MOVE_PROMOTES]:
         next_kings32 |= to_bit
 

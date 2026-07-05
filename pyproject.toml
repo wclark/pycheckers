@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "pycheckers"
 version = "0.1.0"
-description = "Checkers move generation and quiet-position tablebase tools."
+description = "American checkers board-state, rule-generation, and inspection tools."
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
@@ -40,17 +40,23 @@ notebook = [
   "nbformat>=5",
 ]
 test = [
+  "coverage[toml]>=7",
   "matplotlib>=3.7",
   "nbclient>=0.10",
   "nbformat>=5",
+  "pytest>=8",
+  "pytest-cov>=5",
 ]
 dev = [
   "build>=1",
+  "coverage[toml]>=7",
   "matplotlib>=3.7",
   "nbclient>=0.10",
   "nbformat>=5",
   "pandas>=2.0",
   "pytest>=8",
+  "pytest-cov>=5",
+  "ruff>=0.8",
 ]
 
 [tool.setuptools.packages.find]
@@ -58,3 +64,30 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 pycheckers = ["py.typed"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.coverage.run]
+branch = true
+source = ["pycheckers"]
+
+[tool.coverage.report]
+fail_under = 82
+show_missing = true
+skip_covered = false
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+
+[tool.ruff.lint]
+select = [
+  "B",
+  "E",
+  "F",
+  "I",
+  "SIM",
+  "UP",
+]

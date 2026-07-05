@@ -4,8 +4,7 @@ import json
 import time
 from pathlib import Path
 
-from pycheckers.quiet import QuietPositionGraph, ROUND_METRIC_FIELDS
-
+from pycheckers.quiet import ROUND_METRIC_FIELDS, QuietPositionGraph
 
 METRIC_FIELDS = ROUND_METRIC_FIELDS
 
@@ -13,8 +12,7 @@ METRIC_FIELDS = ROUND_METRIC_FIELDS
 def parse_args():
     parser = argparse.ArgumentParser(
         description=(
-            "Expand reachable 12-vs-12 non-king checkers states by quiet moves "
-            "and log per-round growth metrics."
+            "Expand reachable 12-vs-12 non-king checkers states by quiet moves and log per-round growth metrics."
         )
     )
     parser.add_argument("--max-rounds", type=int, default=None)
@@ -36,9 +34,10 @@ def main():
     graph = QuietPositionGraph()
     started = time.perf_counter()
 
-    with csv_path.open("w", newline="", encoding="utf-8") as csv_file, jsonl_path.open(
-        "w", encoding="utf-8"
-    ) as jsonl_file:
+    with (
+        csv_path.open("w", newline="", encoding="utf-8") as csv_file,
+        jsonl_path.open("w", encoding="utf-8") as jsonl_file,
+    ):
         writer = csv.DictWriter(csv_file, fieldnames=METRIC_FIELDS)
         writer.writeheader()
 
