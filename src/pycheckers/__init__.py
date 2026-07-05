@@ -21,8 +21,8 @@ from .bitboard import (
     square_mask,
     validate_position,
 )
-from .display import show_state, show_turn
-from .rules import legal_successors, move_record, moves_df, turns_df
+from .display import show_move_rows, show_state, show_turn, show_turn_rows
+from .rules import legal_successors, move_record, moves_df, state_record, turns_df
 from .state import BoardState, as_state
 
 __version__ = "0.1.0"
@@ -50,10 +50,13 @@ __all__ = [
     "move_record",
     "moves_df",
     "show_board",
+    "show_move_rows",
     "show_state",
     "show_turn",
+    "show_turn_rows",
     "square_from_mask",
     "square_mask",
+    "state_record",
     "turns_df",
     "validate_position",
 ]

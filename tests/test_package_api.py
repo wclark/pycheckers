@@ -6,8 +6,10 @@ from pycheckers import (
     BoardState,
     legal_successors,
     moves_df,
+    show_move_rows,
     show_state,
     show_turn,
+    show_turn_rows,
     square_mask,
     turns_df,
 )
@@ -43,6 +45,8 @@ class PackageApiTests(unittest.TestCase):
         self.assertTrue(df.iloc[0]["is_capture"])
         self.assertEqual((df.iloc[0]["from_r"], df.iloc[0]["from_c"]), (2, 1))
         self.assertEqual((df.iloc[0]["to_r"], df.iloc[0]["to_c"]), (4, 3))
+        self.assertEqual(df.iloc[0]["from_mask_hex"], "0x0000000000020000")
+        self.assertEqual(df.iloc[0]["captured_mask_hex"], "0x0000000004000000")
 
     def test_multi_jump_turn_states_keep_side_until_turn_ends(self):
         state = BoardState(
@@ -81,11 +85,17 @@ class PackageApiTests(unittest.TestCase):
 
         fig, _ax = show_state(state, size=1, show=False)
         turn_fig, _axes = show_turn(state, turn, size=1, show=False)
+        move_rows_fig, _move_axes = show_move_rows(state, state.legal_moves()[:1], size=1, show=False)
+        turn_rows_fig, _turn_axes = show_turn_rows(state, turn, size=1, show=False)
 
         self.assertIsNotNone(fig)
         self.assertIsNotNone(turn_fig)
+        self.assertIsNotNone(move_rows_fig)
+        self.assertIsNotNone(turn_rows_fig)
         plt.close(fig)
         plt.close(turn_fig)
+        plt.close(move_rows_fig)
+        plt.close(turn_rows_fig)
 
 
 if __name__ == "__main__":
