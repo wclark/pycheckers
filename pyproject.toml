@@ -1,0 +1,59 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pycheckers"
+version = "0.1.0"
+description = "Checkers move generation and quiet-position tablebase tools."
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+authors = [
+  { name = "Bill Clark" }
+]
+dependencies = [
+  "pandas>=2.0",
+]
+classifiers = [
+  "Development Status :: 2 - Pre-Alpha",
+  "Intended Audience :: Science/Research",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Topic :: Games/Entertainment :: Board Games",
+  "Topic :: Scientific/Engineering :: Information Analysis",
+]
+
+[project.urls]
+Homepage = "https://github.com/wclark/pycheckers"
+Repository = "https://github.com/wclark/pycheckers"
+Issues = "https://github.com/wclark/pycheckers/issues"
+
+[project.optional-dependencies]
+analysis = [
+  "matplotlib>=3.7",
+]
+notebook = [
+  "ipykernel>=6",
+  "jupyterlab>=4",
+  "matplotlib>=3.7",
+  "nbformat>=5",
+]
+test = [
+  "nbclient>=0.10",
+  "nbformat>=5",
+]
+dev = [
+  "build>=1",
+  "matplotlib>=3.7",
+  "nbclient>=0.10",
+  "nbformat>=5",
+  "pandas>=2.0",
+  "pytest>=8",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+pycheckers = ["py.typed"]
