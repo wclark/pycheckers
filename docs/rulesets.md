@@ -20,11 +20,11 @@ by_side = ruleset.rules_by_side
 by_metadata = ruleset.rules_by_metadata
 ```
 
-It also provides dataframe and plotting views:
+It also provides dataframe and graphical display views:
 
 ```python
 df = ruleset.to_dataframe()
-figures = ruleset.plot(df.iloc[:3])
+figures = ruleset.display(df.iloc[:3])
 ```
 
 Legal primitive rules are matched against `Turn` objects:

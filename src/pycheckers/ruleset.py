@@ -97,6 +97,13 @@ class Board:
 
         return {"black": self.black, "white": self.white, "kings": self.kings}
 
+    def display(self, size=3, title=None, show=True):
+        """Render this board with matplotlib and return ``(figure, axis)``."""
+
+        from .display import show_board
+
+        return show_board(self, size=size, title=title, show=show)
+
 
 @dataclass(frozen=True, slots=True)
 class Turn:
@@ -189,6 +196,13 @@ class Turn:
         if self.metadata:
             record["metadata"] = dict(self.metadata)
         return record
+
+    def display(self, size=3, title=None, show=True):
+        """Render this turn with matplotlib and return ``(figure, axis)``."""
+
+        from .display import show_turn
+
+        return show_turn(self, size=size, title=title, show=show)
 
 
 @dataclass(frozen=True, slots=True)
@@ -393,6 +407,13 @@ class Rule:
             "king": bool(self.conditions.king),
         }
 
+    def display(self, size=3.2, title=None, show=True):
+        """Render this primitive rule and return ``(figure, axes)``."""
+
+        from .display import show_ruleset_rows
+
+        return show_ruleset_rows([self], size=size, title=title, show=show)[0]
+
 
 class Ruleset:
     """A collection of primitive rules with native Python indexes and records."""
@@ -494,6 +515,11 @@ class Ruleset:
         from .display import show_ruleset_rows
 
         return show_ruleset_rows(self, rules=rules, size=size, title=title, show=show)
+
+    def display(self, rules=None, size=3.2, title=None, show=True):
+        """Render selected rules with condition, effect, and summary boards."""
+
+        return self.plot(rules=rules, size=size, title=title, show=show)
 
     def indices_for(self, black_to_move=None, king=None, promotion=None, capture=None):
         """Return rule indexes matching metadata filters."""
