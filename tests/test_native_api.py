@@ -1,4 +1,7 @@
+import sys
+import types
 import unittest
+from unittest.mock import Mock, patch
 
 import matplotlib.pyplot as plt
 
@@ -22,6 +25,8 @@ from pycheckers import (
     square_index32,
     square_mask32,
 )
+from pycheckers.display import _display_figure, _show_rule_row
+from pycheckers.ruleset import _add_template
 
 
 class NativeApiTests(unittest.TestCase):
@@ -63,10 +68,14 @@ class NativeApiTests(unittest.TestCase):
         self.assertEqual(turn.side, "black")
         self.assertEqual(metadata_turn.side, "white")
         self.assertEqual(dict(metadata_turn.metadata), {"kind": "demo", "round": 3})
+        self.assertEqual(metadata_turn.as_tuple(), (*board.as_tuple(), 0, (("kind", "demo"), ("round", 3))))
+        self.assertEqual(metadata_turn.as_dict()["metadata"], {"kind": "demo", "round": 3})
         self.assertEqual(as_board(board.as_dict()), board)
         self.assertEqual(as_turn(turn.as_dict()), turn)
+        self.assertEqual(as_turn(turn.as_tuple()), turn)
         self.assertEqual(Turn.from_tuple((*board.as_tuple(), 0)).side, "white")
         self.assertEqual(Turn.from_tuple((*board.as_tuple(), 1, {"x": 1})).metadata, (("x", 1),))
+        self.assertEqual(Turn(board, 1, [("source", "list")]).metadata, (("source", "list"),))
 
         with self.assertRaises(ValueError):
             Board(1, 1, 0)
@@ -140,6 +149,7 @@ class NativeApiTests(unittest.TestCase):
         self.assertEqual(rule.move_record()["to_mask"], square_mask32(3, 0))
         self.assertEqual(next_turn.black, square_mask32(3, 0))
         self.assertEqual(next_turn.black_to_move, 0)
+        self.assertEqual(rule.apply(turn, switch_side=False).black_to_move, 1)
 
         copied = Rule.from_record(rule.as_dict)
         nested = Rule(rule.conditions.as_dict, rule.effects.as_dict)
@@ -151,8 +161,25 @@ class NativeApiTests(unittest.TestCase):
         self.assertEqual(nested.as_tuple, rule.as_tuple)
         self.assertEqual(white_rule.conditions.mover, square_mask32(5, 0))
         self.assertEqual(white_rule.mover_effect, square_mask32(4, 1))
+        self.assertEqual(white_rule.flags, 0)
+        self.assertFalse(rule.applies(Turn.from_masks(square_mask32(2, 1), 0, 0, 0)))
         with self.assertRaises(ValueError):
             rule.apply(Turn.from_masks(0, 0, 0, 1))
+
+    def test_capture_king_rule_metadata(self):
+        rule = Rule(
+            Conditions(square_mask32(4, 1), square_mask32(5, 0), square_mask32(3, 2), 0, 1),
+            Effects(0, square_mask32(3, 2), square_mask32(5, 0) | square_mask32(4, 1), 0, 1),
+        )
+        turn = Turn.from_masks(square_mask32(4, 1), square_mask32(5, 0), square_mask32(5, 0), 0)
+        next_turn = rule.apply(turn)
+
+        self.assertTrue(rule.applies(turn))
+        self.assertEqual(rule.flags, 0b1010)
+        self.assertEqual(rule.captured_mask, square_mask32(4, 1))
+        self.assertEqual(rule.move_record()["captured_mask"], square_mask32(4, 1))
+        self.assertEqual(next_turn.white, square_mask32(3, 2))
+        self.assertEqual(next_turn.kings, square_mask32(3, 2))
 
     def test_initial_legal_moves_are_compact(self):
         ruleset = Ruleset.american()
@@ -207,11 +234,13 @@ class NativeApiTests(unittest.TestCase):
         dataframe_ruleset = Ruleset.from_records(ruleset.to_dataframe().iloc[:2])
         rule_ruleset = Ruleset.from_records(ruleset[0])
         dict_ruleset = Ruleset.from_records(ruleset.record(0))
+        list_ruleset = Ruleset.from_records([ruleset.record(0), ruleset.record(1)])
         copied_ruleset = Ruleset.from_records(dataframe_ruleset)
 
         self.assertEqual(len(dataframe_ruleset), 2)
         self.assertEqual(len(rule_ruleset), 1)
         self.assertEqual(len(dict_ruleset), 1)
+        self.assertEqual(len(list_ruleset), 2)
         self.assertEqual(len(copied_ruleset), 2)
         self.assertEqual(len(Ruleset.from_records(ruleset.to_dataframe().iloc[0])), 1)
         self.assertEqual(len(ruleset.select_records(None)), 510)
@@ -223,31 +252,109 @@ class NativeApiTests(unittest.TestCase):
         self.assertEqual(as_board(Board.initial().as_tuple()), Board.initial())
         self.assertEqual(as_turn(Turn.initial()), Turn.initial())
 
+    def test_template_deduplication_helper(self):
+        templates = []
+        seen = set()
+
+        _add_template(templates, seen, 1, 2, 0, 1, 1)
+        _add_template(templates, seen, 1, 2, 0, 1, 1)
+        _add_template(templates, seen, 1, 4, 2, 2, 2)
+
+        self.assertEqual(
+            templates,
+            [
+                {"from_mask": 1, "to_mask": 2, "captured_mask": 0, "dr": 1, "dc": 1},
+                {"from_mask": 1, "to_mask": 4, "captured_mask": 2, "dr": 2, "dc": 2},
+            ],
+        )
+
     def test_display_helpers_return_figures(self):
         ruleset = Ruleset.american()
         promotion_index = ruleset.indices_for(promotion=1)[0]
         board_fig, _board_ax = show_board(Board.initial(), size=1, show=False)
         turn_fig, _turn_ax = show_turn(Turn.initial(), size=1, show=False)
+        board_method_fig, _board_method_ax = Board.initial().display(size=1, show=False)
+        turn_method_fig, _turn_method_ax = Turn.initial().display(size=1, show=False)
+        rule_method_fig, rule_method_axes = ruleset[0].display(size=1, show=False)
         indexed_rule_rows = ruleset.plot(rules=[0], size=1, show=False)
+        display_rule_rows = ruleset.display(rules=[0], size=1, show=False)
         promotion_rule_rows = ruleset.plot(rules=[promotion_index], size=1, show=False)
+        white_king_rule_rows = ruleset.plot(rules=ruleset.indices_for(black_to_move=0, king=1)[:1], size=1, show=False)
         dataframe_rule_rows = show_ruleset_rows(ruleset, rules=ruleset.to_dataframe().iloc[:1], size=1, show=False)
         direct_rule_rows = show_ruleset_rows([ruleset[0]], size=1, title="direct", show=False)
 
         self.assertIsNotNone(board_fig)
         self.assertIsNotNone(turn_fig)
+        self.assertIsNotNone(board_method_fig)
+        self.assertIsNotNone(turn_method_fig)
+        self.assertIsNotNone(rule_method_fig)
+        self.assertEqual(rule_method_axes.shape, (3,))
         self.assertEqual(len(indexed_rule_rows), 1)
+        self.assertEqual(len(display_rule_rows), 1)
         self.assertEqual(len(promotion_rule_rows), 1)
+        self.assertEqual(len(white_king_rule_rows), 1)
         self.assertEqual(len(dataframe_rule_rows), 1)
         self.assertEqual(len(direct_rule_rows), 1)
         self.assertEqual(indexed_rule_rows[0][1].shape, (3,))
         self.assertIn("capture:", indexed_rule_rows[0][1][2].texts[0].get_text())
+        untitled_fig, untitled_axes = _show_rule_row(ruleset.record(0), size=1, title=None)
+        self.assertEqual(untitled_axes.shape, (3,))
         with self.assertRaises(ValueError):
             show_ruleset_rows(ruleset, rules=[], show=False)
 
         plt.close(board_fig)
         plt.close(turn_fig)
-        for fig, _axes in [*indexed_rule_rows, *promotion_rule_rows, *dataframe_rule_rows, *direct_rule_rows]:
+        plt.close(board_method_fig)
+        plt.close(turn_method_fig)
+        for fig, _axes in [
+            (rule_method_fig, rule_method_axes),
+            *indexed_rule_rows,
+            *display_rule_rows,
+            *promotion_rule_rows,
+            *white_king_rule_rows,
+            *dataframe_rule_rows,
+            *direct_rule_rows,
+            (untitled_fig, untitled_axes),
+        ]:
             plt.close(fig)
+
+    def test_display_show_paths_are_exercised(self):
+        ruleset = Ruleset.american()
+
+        with patch("matplotlib.pyplot.show") as show:
+            board_fig, _board_ax = Board.initial().display(size=1, show=True)
+            show.assert_called_once()
+
+        display = Mock()
+        ipython_module = types.ModuleType("IPython")
+        display_module = types.ModuleType("IPython.display")
+        display_module.display = display
+        ipython_module.display = display_module
+        with patch.dict(sys.modules, {"IPython": ipython_module, "IPython.display": display_module}):
+            rule_rows = ruleset.display(rules=[0], size=1, show=True)
+        display.assert_called_once()
+
+        with (
+            patch("builtins.__import__", side_effect=_block_ipython_display_import),
+            patch("matplotlib.pyplot.show") as show,
+        ):
+            fallback_fig, _fallback_ax = plt.subplots()
+            _display_figure(fallback_fig)
+            show.assert_called_once()
+
+        plt.close(board_fig)
+        plt.close(fallback_fig)
+        for fig, _axes in rule_rows:
+            plt.close(fig)
+
+
+def _block_ipython_display_import(name, globals=None, locals=None, fromlist=(), level=0):
+    if name == "IPython.display":
+        raise ImportError
+    return _REAL_IMPORT(name, globals, locals, fromlist, level)
+
+
+_REAL_IMPORT = __import__
 
 
 if __name__ == "__main__":

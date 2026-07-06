@@ -33,7 +33,7 @@ format checks. API docs are built with MkDocs and mkdocstrings.
 ## Minimal Example
 
 ```python
-from pycheckers import Ruleset, Turn, show_board
+from pycheckers import Ruleset, Turn
 
 ruleset = Ruleset.american()
 turn = Turn.initial()
@@ -43,8 +43,8 @@ moves = ruleset.legal_moves(turn)
 successors = ruleset.successors(turn)
 
 print(len(rules), len(moves), len(successors))
-show_board(turn)
-ruleset.plot([0, 1, 2])
+turn.display()
+ruleset.display([0, 1, 2])
 ```
 
 ## Native Data
