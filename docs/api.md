@@ -1,17 +1,19 @@
 # API Reference
 
-::: pycheckers.ruleset.Board
+::: clatsop.ruleset.Board
 
-::: pycheckers.ruleset.Turn
+::: clatsop.ruleset.Turn
 
-::: pycheckers.ruleset.Conditions
+::: clatsop.ruleset.Conditions
 
-::: pycheckers.ruleset.Effects
+::: clatsop.ruleset.Effects
 
-::: pycheckers.ruleset.Rule
+::: clatsop.ruleset.Rule
 
-::: pycheckers.ruleset.Ruleset
+::: clatsop.ruleset.Transition
 
-::: pycheckers.encoding
+::: clatsop.ruleset.Ruleset
 
-::: pycheckers.display
+::: clatsop.encoding
+
+::: clatsop.display

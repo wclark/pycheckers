@@ -1,6 +1,6 @@
-site_name: pycheckers
+site_name: Clatsop
 site_description: American checkers board-state, rule-generation, and inspection tools.
-repo_url: https://github.com/wclark/pycheckers
+repo_url: https://github.com/wclark/Clatsop
 
 theme:
   name: readthedocs

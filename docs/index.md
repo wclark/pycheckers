@@ -1,6 +1,6 @@
-# pycheckers
+# Clatsop
 
-`pycheckers` is a compact native-32-bit model for American checkers boards,
+`clatsop` is a compact native-32-bit model for American checkers boards,
 turns, primitive rules, and rulesets.
 
 The core public objects are:

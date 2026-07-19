@@ -3,18 +3,16 @@ requires = ["setuptools>=69", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "pycheckers"
+name = "clatsop"
 version = "0.1.0"
-description = "American checkers board-state, rule-generation, and inspection tools."
+description = "Native 32-bit American checkers rules, move generation, and board-state tools."
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
 authors = [
   { name = "Bill Clark" }
 ]
-dependencies = [
-  "pandas>=2.0",
-]
+dependencies = []
 classifiers = [
   "Development Status :: 2 - Pre-Alpha",
   "Intended Audience :: Science/Research",
@@ -25,19 +23,22 @@ classifiers = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/wclark/pycheckers"
-Repository = "https://github.com/wclark/pycheckers"
-Issues = "https://github.com/wclark/pycheckers/issues"
+Homepage = "https://github.com/wclark/Clatsop"
+Documentation = "https://wclark.github.io/Clatsop/"
+Repository = "https://github.com/wclark/Clatsop"
+Issues = "https://github.com/wclark/Clatsop/issues"
 
 [project.optional-dependencies]
 analysis = [
   "matplotlib>=3.7",
+  "pandas>=2.0",
 ]
 notebook = [
   "ipykernel>=6",
   "jupyterlab>=4",
   "matplotlib>=3.7",
   "nbformat>=5",
+  "pandas>=2.0",
 ]
 docs = [
   "mkdocs>=1.6",
@@ -48,6 +49,7 @@ test = [
   "matplotlib>=3.7",
   "nbclient>=0.10",
   "nbformat>=5",
+  "pandas>=2.0",
   "pytest>=8",
   "pytest-cov>=5",
 ]
@@ -69,7 +71,7 @@ dev = [
 where = ["src"]
 
 [tool.setuptools.package-data]
-pycheckers = ["py.typed"]
+clatsop = ["py.typed"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -77,7 +79,7 @@ pythonpath = ["src"]
 
 [tool.coverage.run]
 branch = true
-source = ["pycheckers"]
+source = ["clatsop"]
 
 [tool.coverage.report]
 fail_under = 100

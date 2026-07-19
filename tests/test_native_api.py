@@ -5,13 +5,14 @@ from unittest.mock import Mock, patch
 
 import matplotlib.pyplot as plt
 
-from pycheckers import (
+from clatsop import (
     MASK32,
     Board,
     Conditions,
     Effects,
     Rule,
     Ruleset,
+    Transition,
     Turn,
     as_board,
     as_turn,
@@ -25,8 +26,8 @@ from pycheckers import (
     square_index32,
     square_mask32,
 )
-from pycheckers.display import _display_figure, _show_rule_row
-from pycheckers.ruleset import _add_template
+from clatsop.display import _display_figure, _show_rule_row
+from clatsop.ruleset import _add_template
 
 
 class NativeApiTests(unittest.TestCase):
@@ -68,13 +69,15 @@ class NativeApiTests(unittest.TestCase):
         self.assertEqual(turn.side, "black")
         self.assertEqual(metadata_turn.side, "white")
         self.assertEqual(dict(metadata_turn.metadata), {"kind": "demo", "round": 3})
-        self.assertEqual(metadata_turn.as_tuple(), (*board.as_tuple(), 0, (("kind", "demo"), ("round", 3))))
+        self.assertEqual(metadata_turn.as_tuple(), (*board.as_tuple(), 0))
+        self.assertEqual(metadata_turn.key, Turn(board, "white").key)
+        self.assertEqual(metadata_turn, Turn(board, "white"))
+        self.assertEqual(len({metadata_turn, Turn(board, "white", {"path": [1, 2]})}), 1)
         self.assertEqual(metadata_turn.as_dict()["metadata"], {"kind": "demo", "round": 3})
         self.assertEqual(as_board(board.as_dict()), board)
         self.assertEqual(as_turn(turn.as_dict()), turn)
         self.assertEqual(as_turn(turn.as_tuple()), turn)
         self.assertEqual(Turn.from_tuple((*board.as_tuple(), 0)).side, "white")
-        self.assertEqual(Turn.from_tuple((*board.as_tuple(), 1, {"x": 1})).metadata, (("x", 1),))
         self.assertEqual(Turn(board, 1, [("source", "list")]).metadata, (("source", "list"),))
 
         with self.assertRaises(ValueError):
@@ -87,6 +90,10 @@ class NativeApiTests(unittest.TestCase):
             Board.from_tuple((1, 2))
         with self.assertRaises(ValueError):
             Turn.from_tuple((1, 2, 3))
+        with self.assertRaises(ValueError):
+            Turn.from_tuple((*board.as_tuple(), 1, {"x": 1}))
+        with self.assertRaises(ValueError):
+            Turn(board, 1, ("not-a-pair",))
         with self.assertRaises(ValueError):
             Turn(Board(0, 0, 0), "red")
 
@@ -116,6 +123,21 @@ class NativeApiTests(unittest.TestCase):
         self.assertEqual(len(Ruleset.from_board_geometry(side=None)), 510)
         self.assertIs(next(iter(ruleset)), ruleset[0])
 
+        records = ruleset.records
+        record_map = ruleset.record_map
+        rule_set = ruleset.rule_set
+        side_map = ruleset.rules_by_side
+        metadata_map = ruleset.rules_by_metadata
+        records[0]["is_black"] = 0
+        record_map[0]["is_black"] = 0
+        rule_set.clear()
+        side_map.clear()
+        metadata_map.clear()
+        self.assertNotEqual(ruleset.record(0)["is_black"], 0)
+        self.assertEqual(len(ruleset.rule_set), 510)
+        self.assertEqual(len(ruleset.rules_by_side), 2)
+        self.assertTrue(ruleset.rules_by_metadata)
+
         first = ruleset.record(0)
         self.assertEqual(first["is_black"], square_mask32(0, 1))
         self.assertEqual(first["is_white"], 0)
@@ -132,6 +154,39 @@ class NativeApiTests(unittest.TestCase):
             _ = ruleset[9999]
         with self.assertRaises(ValueError):
             Ruleset.american("red")
+
+    def test_every_generated_rule_obeys_independent_mask_invariants(self):
+        ruleset = Ruleset.american()
+
+        for index, rule in enumerate(ruleset):
+            with self.subTest(rule=index):
+                conditions = rule.conditions
+                effects = rule.effects
+                condition_masks = (conditions.is_black, conditions.is_white, conditions.is_empty)
+
+                self.assertFalse(condition_masks[0] & condition_masks[1])
+                self.assertFalse(condition_masks[0] & condition_masks[2])
+                self.assertFalse(condition_masks[1] & condition_masks[2])
+                self.assertEqual(conditions.mover.bit_count(), 1)
+                self.assertEqual(rule.mover_effect.bit_count(), 1)
+                self.assertEqual(abs(rule.move_record()["dr"]), 2 if effects.capture else 1)
+                self.assertEqual(abs(rule.move_record()["dc"]), 2 if effects.capture else 1)
+                self.assertEqual(rule.captured_mask.bit_count(), int(bool(effects.capture)))
+                self.assertTrue(effects.be_empty & conditions.mover)
+                self.assertFalse(effects.be_empty & rule.mover_effect)
+
+                kings = conditions.mover if conditions.king else 0
+                minimal_turn = Turn.from_masks(
+                    conditions.is_black,
+                    conditions.is_white,
+                    kings,
+                    conditions.black_to_move,
+                )
+                self.assertTrue(rule.applies(minimal_turn))
+                result = rule.apply(minimal_turn)
+                self.assertEqual(result.board.occupied.bit_count(), 1)
+                self.assertTrue(result.board.occupied & rule.mover_effect)
+                self.assertEqual(bool(result.kings), bool(conditions.king or effects.promotion))
 
     def test_rule_conditions_effects_and_records(self):
         rule = Rule(
@@ -212,6 +267,77 @@ class NativeApiTests(unittest.TestCase):
         self.assertEqual(next_turn.black, square_mask32(4, 3))
         self.assertEqual(next_turn.white, 0)
         self.assertEqual(next_turn.black_to_move, 0)
+
+    def test_forced_capture_is_global_when_filtering_by_piece(self):
+        ruleset = Ruleset.american()
+        capturing_piece = square_mask32(2, 1)
+        quiet_piece = square_mask32(2, 5)
+        turn = Turn.from_masks(capturing_piece | quiet_piece, square_mask32(3, 2), 0, 1)
+
+        self.assertTrue(ruleset.legal_rule_indices(turn, from_mask=capturing_piece))
+        self.assertEqual(ruleset.legal_rule_indices(turn, from_mask=quiet_piece), [])
+        self.assertEqual(ruleset.legal_rules(turn, from_mask=quiet_piece), ())
+        self.assertEqual(ruleset.legal_moves(turn, from_mask=quiet_piece), ())
+
+    def test_capture_chains_are_completed_before_switching_sides(self):
+        ruleset = Ruleset.american()
+        turn = Turn.from_masks(
+            square_mask32(2, 1),
+            square_mask32(3, 2) | square_mask32(5, 4),
+            0,
+            1,
+        )
+
+        transitions = ruleset.legal_transitions(turn)
+        self.assertEqual(len(transitions), 1)
+        self.assertIsInstance(transitions[0], Transition)
+        self.assertEqual(len(transitions[0].rule_indices), 2)
+        self.assertEqual(transitions[0].turn.black, square_mask32(6, 5))
+        self.assertEqual(transitions[0].turn.white, 0)
+        self.assertEqual(transitions[0].turn.black_to_move, 0)
+        self.assertEqual(transitions[0].key, (transitions[0].rule_indices, transitions[0].turn.key))
+        self.assertEqual(transitions[0].as_dict()["turn"], transitions[0].turn.as_dict())
+        self.assertEqual(ruleset.successors(turn), (transitions[0].turn,))
+        self.assertEqual(ruleset.successor_map(turn), {transitions[0].rule_indices: transitions[0].turn})
+
+    def test_promotion_ends_a_capture_chain(self):
+        ruleset = Ruleset.american()
+        remaining_white = square_mask32(6, 3)
+        turn = Turn.from_masks(
+            square_mask32(5, 0),
+            square_mask32(6, 1) | remaining_white,
+            0,
+            1,
+        )
+
+        transitions = ruleset.legal_transitions(turn)
+        self.assertEqual(len(transitions), 1)
+        self.assertEqual(len(transitions[0].rule_indices), 1)
+        self.assertEqual(transitions[0].turn.black, square_mask32(7, 2))
+        self.assertEqual(transitions[0].turn.white, remaining_white)
+        self.assertEqual(transitions[0].turn.kings, square_mask32(7, 2))
+        self.assertEqual(transitions[0].turn.black_to_move, 0)
+
+        chained_turn = Turn.from_masks(
+            square_mask32(3, 0),
+            square_mask32(4, 1) | square_mask32(6, 3),
+            0,
+            1,
+        )
+        chained_transition = ruleset.legal_transitions(chained_turn)[0]
+        self.assertEqual(len(chained_transition.rule_indices), 2)
+        self.assertEqual(chained_transition.turn.black, square_mask32(7, 4))
+        self.assertEqual(chained_transition.turn.kings, square_mask32(7, 4))
+
+    def test_terminal_turn_has_no_transitions(self):
+        ruleset = Ruleset.american()
+        turn = Turn.from_masks(square_mask32(7, 0), 0, 0, 1)
+
+        self.assertEqual(ruleset.legal_transitions(turn), ())
+        self.assertEqual(ruleset.successors(turn), ())
+        self.assertEqual(ruleset.successor_map(turn), {})
+        with self.assertRaises(ValueError):
+            Transition((), turn)
 
     def test_king_and_promotion_semantics(self):
         ruleset = Ruleset.american()
