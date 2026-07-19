@@ -9,7 +9,7 @@ runtime rule. Each row has conditions, effects, and metadata:
 The ruleset exposes native Python views for analysis:
 
 ```python
-from pycheckers import Ruleset
+from clatsop import Ruleset
 
 ruleset = Ruleset.american()
 
@@ -30,7 +30,7 @@ figures = ruleset.display(df.iloc[:3])
 Legal primitive rules are matched against `Turn` objects:
 
 ```python
-from pycheckers import Ruleset, Turn
+from clatsop import Ruleset, Turn
 
 ruleset = Ruleset.american()
 turn = Turn.initial()
@@ -38,6 +38,11 @@ turn = Turn.initial()
 rule_indexes = ruleset.legal_rule_indices(turn)
 rules = ruleset.legal_rules(turn)
 moves = ruleset.legal_moves(turn)
+transitions = ruleset.legal_transitions(turn)
 next_turns = ruleset.successors(turn)
 next_by_rule = ruleset.successor_map(turn)
 ```
+
+The rule and move methods return legal primitive first steps. Transition and
+successor methods finish every mandatory capture chain before changing sides.
+Their mapping keys are tuples of primitive rule indexes, one index per jump.

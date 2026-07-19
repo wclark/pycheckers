@@ -1,6 +1,6 @@
-# pycheckers
+# Clatsop
 
-`pycheckers` is a small Python package for representing American checkers
+`clatsop` is a small Python package for representing American checkers
 boards, turns, primitive rules, and rulesets using native 32-bit playable-square
 masks.
 
@@ -20,11 +20,12 @@ From this repository root:
 
 ```powershell
 python -m pip install -e ".[dev]"
-python -m compileall -q src tests
-ruff check src tests
-ruff format --check src tests
-pytest --cov=pycheckers --cov-report=term-missing
+python -m compileall -q src tests benchmarks
+ruff check src tests benchmarks
+ruff format --check src tests benchmarks
+pytest --cov=clatsop --cov-report=term-missing
 mkdocs build --strict
+python benchmarks/benchmark_move_generation.py --iterations 10000
 ```
 
 The CI path uses `pytest` with coverage reporting and `ruff` for lint and
@@ -33,16 +34,16 @@ format checks. API docs are built with MkDocs and mkdocstrings.
 ## Minimal Example
 
 ```python
-from pycheckers import Ruleset, Turn
+from clatsop import Ruleset, Turn
 
 ruleset = Ruleset.american()
 turn = Turn.initial()
 
 rules = ruleset.to_dataframe()
-moves = ruleset.legal_moves(turn)
+transitions = ruleset.legal_transitions(turn)
 successors = ruleset.successors(turn)
 
-print(len(rules), len(moves), len(successors))
+print(len(rules), len(transitions), len(successors))
 turn.display()
 ruleset.display([0, 1, 2])
 ```
@@ -64,3 +65,7 @@ by_metadata = ruleset.rules_by_metadata
 
 All masks are 32-bit playable-square masks. There is no 64-bit board conversion
 layer in the public API.
+
+`legal_rule_indices()` and `legal_moves()` describe legal primitive first steps.
+`legal_transitions()` and `successors()` expand mandatory capture chains and only
+return completed turns. Promotion ends a capture chain.
